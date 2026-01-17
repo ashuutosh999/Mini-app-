@@ -46,14 +46,15 @@
 
   .screen {
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.9);
     border: 2px solid var(--base-blue);
-    padding: 20px;
+    padding: 24px;
     border-radius: 16px;
     text-align: center;
     backdrop-filter: blur(5px);
     box-shadow: 0 0 20px rgba(0, 82, 255, 0.4);
-    max-width: 90%;
+    width: 85%;
+    max-width: 320px;
     display: none;
   }
   
@@ -63,19 +64,21 @@
     font-family: 'Press Start 2P', cursive; 
     color: var(--base-blue); 
     text-shadow: 2px 2px #fff;
-    font-size: 24px;
+    font-size: 22px;
     margin-bottom: 20px;
+    line-height: 1.4;
   }
 
   input {
     background: #111;
     border: 1px solid var(--base-blue);
     color: white;
-    padding: 10px;
+    padding: 12px;
     font-size: 16px;
     border-radius: 8px;
-    margin-bottom: 10px;
-    width: 80%;
+    margin-bottom: 15px;
+    width: 100%;
+    box-sizing: border-box;
     text-align: center;
     font-family: 'Rajdhani', sans-serif;
   }
@@ -84,19 +87,32 @@
     background: var(--base-blue);
     color: white;
     border: none;
-    padding: 12px 24px;
+    padding: 14px 24px;
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: bold;
     cursor: pointer;
     transition: transform 0.1s;
     font-family: 'Press Start 2P', cursive;
-    font-size: 12px;
-    margin-top: 10px;
+    width: 100%;
+    margin-top: 8px;
   }
   
   button:active { transform: scale(0.95); }
   button:disabled { background: #555; cursor: not-allowed; }
+
+  /* WALLET SELECT BUTTONS */
+  .wallet-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    margin-bottom: 10px;
+  }
+  .wallet-btn:hover { background: #2a2a40; border-color: var(--base-blue); }
+  .wallet-icon { width: 24px; height: 24px; }
 
   /* GAME HUD */
   #hud {
@@ -105,6 +121,7 @@
     width: 100%;
     max-width: 400px;
     padding: 10px;
+    box-sizing: border-box;
     font-size: 18px;
     font-weight: bold;
     text-shadow: 0 0 5px var(--neon-blue);
@@ -142,7 +159,6 @@
   .lb-name { color: white; }
   .lb-score { color: var(--neon-blue); }
 
-  /* MOBILE CONTROLS HINT */
   .mobile-hint {
     margin-top: 10px;
     color: #666;
@@ -153,7 +169,6 @@
     .mobile-hint { display: block; }
   }
   
-  /* SCORE ANIMATION STYLE */
   #finalScore {
     font-size: 32px;
     color: var(--neon-blue);
@@ -183,13 +198,31 @@
     
     <div id="screen-connect" class="screen active">
       <h1>BASE SNAKE</h1>
-      <p>Play to earn your spot on-chain.</p>
-      <button onclick="connectWallet()">🔗 CONNECT WALLET</button>
+      <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
+      <button onclick="showScreen('screen-wallet-select')">🔗 CONNECT WALLET</button>
+    </div>
+
+    <div id="screen-wallet-select" class="screen">
+      <h1>CHOOSE WALLET</h1>
+      
+      <button class="wallet-btn" onclick="connectSpecificWallet('metamask')">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
+        MetaMask
+      </button>
+
+      <button class="wallet-btn" onclick="connectSpecificWallet('coinbase')">
+        <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
+        Coinbase Wallet
+      </button>
+
+      <div style="margin-top:15px; font-size:12px; color:#666; cursor:pointer;" onclick="showScreen('screen-connect')">
+        ← Go Back
+      </div>
     </div>
 
     <div id="screen-register" class="screen">
       <h1>NEW PLAYER</h1>
-      <p>Enter a username to link to your wallet.</p>
+      <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter a username to link to your wallet.</p>
       <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
       <br>
       <button onclick="registerUser()">REGISTER</button>
@@ -197,7 +230,7 @@
 
     <div id="screen-start" class="screen">
       <h1 id="welcomeMsg">WELCOME</h1>
-      <p>High Score: <span id="personalBest">0</span></p>
+      <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
       <button onclick="startGame()">▶ START GAME</button>
     </div>
 
@@ -213,10 +246,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-/**
- * CONFIGURATION
- * UPDATED WITH YOUR DEPLOYED ADDRESS
- */
+// --- CONFIGURATION ---
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
 
 const ABI = [
@@ -231,7 +261,6 @@ const ABI = [
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Responsive Canvas
 const setCanvasSize = () => {
     const size = Math.min(window.innerWidth - 20, 400);
     canvas.width = size;
@@ -258,41 +287,66 @@ function showScreen(id) {
 function animateScore(targetScore) {
     const scoreElement = document.getElementById("finalScore");
     let current = 0;
-    const duration = 1000; // 1 second animation
+    const duration = 1000;
     const startTime = performance.now();
 
     function update(time) {
         const elapsed = time - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function for smooth effect (easeOut)
         const ease = 1 - Math.pow(1 - progress, 3);
-        
         current = Math.floor(ease * targetScore);
         scoreElement.innerText = current;
 
-        if (progress < 1) {
-            requestAnimationFrame(update);
-        } else {
-            scoreElement.innerText = targetScore; // Ensure it ends on exact number
-        }
+        if (progress < 1) requestAnimationFrame(update);
+        else scoreElement.innerText = targetScore;
     }
     requestAnimationFrame(update);
 }
 
 /* ================= WEB3 LOGIC ================= */
-async function connectWallet() {
-    if (!window.ethereum) return alert("Please install Coinbase Wallet or MetaMask");
+// Helper to find specific provider in window.ethereum
+function getProvider(type) {
+    const eth = window.ethereum;
+    if (!eth) return null;
+
+    // If multiple wallets are installed, they might be in the providers array
+    if (eth.providers && Array.isArray(eth.providers)) {
+        if (type === 'coinbase') {
+            return eth.providers.find(p => p.isCoinbaseWallet);
+        }
+        if (type === 'metamask') {
+            return eth.providers.find(p => p.isMetaMask);
+        }
+    }
+
+    // If only one is installed, check its flags
+    if (type === 'coinbase' && eth.isCoinbaseWallet) return eth;
+    if (type === 'metamask' && eth.isMetaMask) return eth;
+
+    // Fallback: If user asked for MetaMask but we only found a generic provider, use it.
+    if (type === 'metamask' && !eth.isCoinbaseWallet) return eth;
     
+    return null;
+}
+
+async function connectSpecificWallet(walletType) {
+    if (!window.ethereum) return alert("No wallet found. Please install MetaMask or Coinbase Wallet.");
+
+    const specificProvider = getProvider(walletType);
+
+    if (!specificProvider) {
+        alert(`${walletType === 'coinbase' ? 'Coinbase Wallet' : 'MetaMask'} not found. Please check your extension.`);
+        return;
+    }
+
     try {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
+        // Create Ethers provider using the specific wallet found
+        provider = new ethers.providers.Web3Provider(specificProvider);
+        
+        // Request accounts from that specific provider
         await provider.send("eth_requestAccounts", []);
         
         const network = await provider.getNetwork();
-        
-        // 8453 = Base Mainnet
-        // 84532 = Base Sepolia (Testnet)
-        // If you are on Sepolia, ensure your wallet is also on Sepolia
         if (network.chainId !== 8453 && network.chainId !== 84532) {
              alert("Please switch to Base Network!");
         }
@@ -305,11 +359,11 @@ async function connectWallet() {
             `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
 
         checkRegistration();
-        fetchLeaderboard();
+        fetchLeaderboard(); // Load leaderboard after connecting
 
     } catch (err) {
         console.error(err);
-        alert("Connection Failed");
+        alert("Connection Failed or Cancelled");
     }
 }
 
@@ -325,9 +379,9 @@ async function checkRegistration() {
             showScreen('screen-start');
         }
     } catch (e) {
-        console.log("Contract not found or error", e);
-        // If contract call fails, usually means user not on correct network or contract not found
-        alert("Could not read contract. Are you on the right network?");
+        console.log("Contract Error", e);
+        // If contract fails (e.g. not deployed yet), assume new user for UI flow
+        showScreen('screen-register'); 
     }
 }
 
@@ -370,39 +424,46 @@ async function submitScore() {
 
 /* ================= LEADERBOARD LOGIC ================= */
 async function fetchLeaderboard() {
-    if (!contract) return;
+    // Note: Leaderboard requires a connected provider to read events
+    if (!contract) {
+        document.getElementById("leaderboardList").innerText = "Connect wallet to view";
+        return;
+    }
     
-    // We scan the last 5000 blocks for "NewScore" events
-    const filter = contract.filters.NewScore();
-    const events = await contract.queryFilter(filter, -5000); 
+    try {
+        const filter = contract.filters.NewScore();
+        const events = await contract.queryFilter(filter, -5000); 
 
-    const currentMonth = new Date().getMonth();
-    let scores = [];
+        const currentMonth = new Date().getMonth();
+        let scores = [];
 
-    events.forEach(e => {
-        const d = new Date(e.args.timestamp * 1000);
-        if (d.getMonth() === currentMonth) {
-            scores.push({
-                name: e.args.username,
-                score: e.args.score.toNumber()
-            });
+        events.forEach(e => {
+            const d = new Date(e.args.timestamp * 1000);
+            if (d.getMonth() === currentMonth) {
+                scores.push({
+                    name: e.args.username,
+                    score: e.args.score.toNumber()
+                });
+            }
+        });
+
+        scores.sort((a,b) => b.score - a.score);
+        const top5 = scores.slice(0, 5);
+
+        const list = document.getElementById("leaderboardList");
+        if(top5.length === 0) {
+            list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores this month yet!</div>";
+        } else {
+            list.innerHTML = top5.map((s, i) => `
+                <div class="lb-row">
+                    <span class="lb-rank">#${i+1}</span>
+                    <span class="lb-name">${s.name}</span>
+                    <span class="lb-score">${s.score}</span>
+                </div>
+            `).join('');
         }
-    });
-
-    scores.sort((a,b) => b.score - a.score);
-    const top5 = scores.slice(0, 5);
-
-    const list = document.getElementById("leaderboardList");
-    if(top5.length === 0) {
-        list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores this month yet!</div>";
-    } else {
-        list.innerHTML = top5.map((s, i) => `
-            <div class="lb-row">
-                <span class="lb-rank">#${i+1}</span>
-                <span class="lb-name">${s.name}</span>
-                <span class="lb-score">${s.score}</span>
-            </div>
-        `).join('');
+    } catch(e) {
+        console.log("Error loading leaderboard", e);
     }
 }
 
@@ -433,18 +494,15 @@ function placeFood() {
 }
 
 function draw() {
-    // Background
     ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Food
     ctx.shadowBlur = 15;
     ctx.shadowColor = "#ff00ff";
     ctx.fillStyle = "#ff00ff";
     ctx.fillRect(food.x, food.y, box-2, box-2);
     ctx.shadowBlur = 0;
 
-    // Snake
     for (let i = 0; i < snake.length; i++) {
         ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
         ctx.shadowBlur = (i === 0) ? 10 : 0;
@@ -453,7 +511,6 @@ function draw() {
         ctx.shadowBlur = 0;
     }
 
-    // Movement
     let snakeX = snake[0].x;
     let snakeY = snake[0].y;
 
@@ -463,7 +520,6 @@ function draw() {
     if (dir === "RIGHT") snakeX += box;
     if (dir === "DOWN") snakeY += box;
 
-    // Boundary & Self Collision
     if (snakeX < 0 || snakeX >= canvas.width || snakeY < 0 || snakeY >= canvas.height || collision(snakeX, snakeY, snake)) {
         gameOver();
         return;
@@ -491,34 +547,22 @@ function collision(x, y, array) {
 function gameOver() {
     isPlaying = false;
     clearInterval(gameLoop);
-    
     showScreen('screen-gameover');
-    animateScore(score); // Trigger Animation
-    
+    animateScore(score);
     document.getElementById('btnSave').disabled = false;
     document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
 }
 
-/* ================= CONTROLS ================= */
-// Keyboard Controls (Arrows + WASD)
+// Controls
 document.addEventListener("keydown", direction);
 function direction(event) {
     const key = event.keyCode;
-    
-    // Left: ArrowLeft (37) or A (65)
     if ((key == 37 || key == 65) && dir != "RIGHT") nextDir = "LEFT";
-    
-    // Up: ArrowUp (38) or W (87)
     else if ((key == 38 || key == 87) && dir != "DOWN") nextDir = "UP";
-    
-    // Right: ArrowRight (39) or D (68)
     else if ((key == 39 || key == 68) && dir != "LEFT") nextDir = "RIGHT";
-    
-    // Down: ArrowDown (40) or S (83)
     else if ((key == 40 || key == 83) && dir != "UP") nextDir = "DOWN";
 }
 
-// Touch / Swipe
 let touchStartX = 0;
 let touchStartY = 0;
 
