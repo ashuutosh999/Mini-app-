@@ -9,7 +9,7 @@
     "name": "Base Snake",
     "description": "Play Snake on Base and save your score on-chain!",
     "iconUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
-    "homeUrl": "https://REPLACE-WITH-YOUR-VERCEL-LINK.vercel.app", 
+    "homeUrl": "https://mini-app-phi-ashen.vercel.app", 
     "splashImageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
     "splashBackgroundColor": "#050510"
   }
