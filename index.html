@@ -3,295 +3,548 @@
 <head>
 <meta charset="UTF-8">
 <title>Base Snake 🟦</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<meta name="application-name" content="Base Snake">
-<meta name="description" content="Snake game with on-chain scores on Base">
-<meta name="theme-color" content="#00e5ff">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0052FF">
 
 <style>
-body {
-  margin: 0;
-  background: radial-gradient(circle at top, #0f2027, #203a43, #2c5364);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #00e5ff;
-  font-family: Arial, sans-serif;
-}
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
 
-h1 { margin: 10px; }
+  :root {
+    --base-blue: #0052FF;
+    --neon-blue: #00e5ff;
+    --neon-pink: #ff00ff;
+    --bg-dark: #050510;
+  }
 
-canvas {
-  background: #000;
-  border: 4px solid #00e5ff;
-  border-radius: 12px;
-}
+  body {
+    margin: 0;
+    background-color: var(--bg-dark);
+    background-image: 
+      linear-gradient(rgba(0, 82, 255, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 82, 255, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    font-family: 'Rajdhani', sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
 
-#score, #highscore {
-  margin: 6px;
-  font-size: 18px;
-}
+  /* UI OVERLAY SYSTEM */
+  #ui-layer {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
 
-#leaderboard {
-  margin-top: 12px;
-  width: 280px;
-  text-align: left;
-  background: rgba(0,0,0,0.4);
-  padding: 10px;
-  border-radius: 10px;
-}
+  .screen {
+    pointer-events: auto;
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid var(--base-blue);
+    padding: 20px;
+    border-radius: 16px;
+    text-align: center;
+    backdrop-filter: blur(5px);
+    box-shadow: 0 0 20px rgba(0, 82, 255, 0.4);
+    max-width: 90%;
+    display: none;
+  }
+  
+  .screen.active { display: block; }
 
-.controls {
-  display: grid;
-  grid-template-columns: repeat(3, 60px);
-  gap: 10px;
-  margin-top: 15px;
-}
+  h1 { 
+    font-family: 'Press Start 2P', cursive; 
+    color: var(--base-blue); 
+    text-shadow: 2px 2px #fff;
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
 
-button {
-  height: 60px;
-  border-radius: 12px;
-  border: none;
-  font-size: 22px;
-  background: #00e5ff;
-  color: #000;
-  font-weight: bold;
-}
+  input {
+    background: #111;
+    border: 1px solid var(--base-blue);
+    color: white;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    width: 80%;
+    text-align: center;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  button {
+    background: var(--base-blue);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.1s;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  
+  button:active { transform: scale(0.95); }
+  button:disabled { background: #555; cursor: not-allowed; }
+
+  /* GAME HUD */
+  #hud {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 400px;
+    padding: 10px;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 5px var(--neon-blue);
+  }
+
+  canvas {
+    background: rgba(0,0,0,0.8);
+    border: 2px solid var(--base-blue);
+    border-radius: 12px;
+    box-shadow: 0 0 15px var(--base-blue);
+    display: block;
+  }
+
+  /* LEADERBOARD */
+  .leaderboard-container {
+    margin-top: 15px;
+    width: 90%;
+    max-width: 350px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 14px;
+  }
+  
+  .lb-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid #222;
+  }
+  .lb-rank { color: var(--neon-pink); font-weight: bold; }
+  .lb-name { color: white; }
+  .lb-score { color: var(--neon-blue); }
+
+  /* MOBILE CONTROLS HINT */
+  .mobile-hint {
+    margin-top: 10px;
+    color: #666;
+    font-size: 12px;
+    display: none;
+  }
+  @media (hover: none) {
+    .mobile-hint { display: block; }
+  }
+  
+  /* SCORE ANIMATION STYLE */
+  #finalScore {
+    font-size: 32px;
+    color: var(--neon-blue);
+    font-weight: bold;
+    text-shadow: 0 0 10px var(--neon-blue);
+  }
+
 </style>
 </head>
-
 <body>
 
-<h1>BASE SNAKE 🟦</h1>
+  <div id="hud">
+    <div id="scoreDisplay">SCORE: 0</div>
+    <div id="walletDisplay">🔴 Not Connected</div>
+  </div>
 
-<button onclick="connectWallet()" style="
-  background:#2563eb;
-  color:white;
-  border:none;
-  padding:10px 16px;
-  border-radius:10px;
-  margin-bottom:8px;
-  font-size:16px;">
-  🔗 Connect Wallet (Base)
-</button>
+  <canvas id="game"></canvas>
 
-<div id="wallet"></div>
-<div id="score">Score: 0</div>
-<div id="highscore">On-chain High Score: --</div>
+  <div class="mobile-hint">👆 Swipe to turn • Tap to speed up</div>
 
-<div id="leaderboard">
-  <strong>🏆 Leaderboard</strong>
-  <div id="leaderboardList"><em>No scores yet</em></div>
-</div>
+  <div class="leaderboard-container">
+    <div style="text-align:center; color: var(--base-blue); font-weight:bold; margin-bottom:5px;">🏆 MONTHLY LEADERS</div>
+    <div id="leaderboardList">Loading...</div>
+  </div>
 
-<canvas id="game" width="360" height="360"></canvas>
+  <div id="ui-layer">
+    
+    <div id="screen-connect" class="screen active">
+      <h1>BASE SNAKE</h1>
+      <p>Play to earn your spot on-chain.</p>
+      <button onclick="connectWallet()">🔗 CONNECT WALLET</button>
+    </div>
 
-<div class="controls">
-  <div></div>
-  <button onclick="setDir('UP')">⬆️</button>
-  <div></div>
-  <button onclick="setDir('LEFT')">⬅️</button>
-  <button onclick="setDir('DOWN')">⬇️</button>
-  <button onclick="setDir('RIGHT')">➡️</button>
-</div>
+    <div id="screen-register" class="screen">
+      <h1>NEW PLAYER</h1>
+      <p>Enter a username to link to your wallet.</p>
+      <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
+      <br>
+      <button onclick="registerUser()">REGISTER</button>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+    <div id="screen-start" class="screen">
+      <h1 id="welcomeMsg">WELCOME</h1>
+      <p>High Score: <span id="personalBest">0</span></p>
+      <button onclick="startGame()">▶ START GAME</button>
+    </div>
+
+    <div id="screen-gameover" class="screen">
+      <h1 style="color:var(--neon-pink)">GAME OVER</h1>
+      <p>Score: <span id="finalScore">0</span></p>
+      <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
+      <button onclick="startGame()">🔄 RESTART</button>
+    </div>
+
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+
 <script>
-/* ================= GAME ================= */
+/**
+ * CONFIGURATION
+ * UPDATED WITH YOUR DEPLOYED ADDRESS
+ */
+const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
+
+const ABI = [
+  "function registerUser(string username) public",
+  "function saveScore(uint256 score) public",
+  "function getPlayer(address _addr) public view returns (string, uint256)",
+  "event NewScore(address indexed player, string username, uint256 score, uint256 timestamp)",
+  "event UserRegistered(address indexed player, string username)"
+];
+
+// --- GAME VARIABLES ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const box = 20;
 
-let snake, dir, food, score;
-let gameInterval = null;
-let gameRunning = false;
+// Responsive Canvas
+const setCanvasSize = () => {
+    const size = Math.min(window.innerWidth - 20, 400);
+    canvas.width = size;
+    canvas.height = size;
+};
+setCanvasSize();
+window.addEventListener('resize', setCanvasSize);
 
-function resetGame() {
-  snake = [{ x: 160, y: 160 }];
-  dir = "RIGHT";
-  food = randomFood();
-  score = 0;
-  gameRunning = true;
-  document.getElementById("score").innerText = "Score: 0";
+const box = 20; 
+let snake, dir, nextDir, food, score, gameLoop;
+let isPlaying = false;
 
-  if (gameInterval) clearInterval(gameInterval);
-  gameInterval = setInterval(draw, 120);
+// --- WALLET STATE ---
+let provider, signer, contract;
+let userAddress, currentUsername;
+
+/* ================= UI NAVIGATION ================= */
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
 }
 
-document.addEventListener("keydown", e => {
-  if (!gameRunning) return;
-  if ((e.key === "ArrowUp" || e.key === "w") && dir !== "DOWN") dir = "UP";
-  if ((e.key === "ArrowDown" || e.key === "s") && dir !== "UP") dir = "DOWN";
-  if ((e.key === "ArrowLeft" || e.key === "a") && dir !== "RIGHT") dir = "LEFT";
-  if ((e.key === "ArrowRight" || e.key === "d") && dir !== "LEFT") dir = "RIGHT";
-});
+/* ================= SCORE ANIMATION ================= */
+function animateScore(targetScore) {
+    const scoreElement = document.getElementById("finalScore");
+    let current = 0;
+    const duration = 1000; // 1 second animation
+    const startTime = performance.now();
 
-function setDir(d) {
-  if (!gameRunning) return;
-  if (d === "UP" && dir !== "DOWN") dir = "UP";
-  if (d === "DOWN" && dir !== "UP") dir = "DOWN";
-  if (d === "LEFT" && dir !== "RIGHT") dir = "LEFT";
-  if (d === "RIGHT" && dir !== "LEFT") dir = "RIGHT";
+    function update(time) {
+        const elapsed = time - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Easing function for smooth effect (easeOut)
+        const ease = 1 - Math.pow(1 - progress, 3);
+        
+        current = Math.floor(ease * targetScore);
+        scoreElement.innerText = current;
+
+        if (progress < 1) {
+            requestAnimationFrame(update);
+        } else {
+            scoreElement.innerText = targetScore; // Ensure it ends on exact number
+        }
+    }
+    requestAnimationFrame(update);
 }
 
-function randomFood() {
-  return {
-    x: Math.floor(Math.random() * 18) * box,
-    y: Math.floor(Math.random() * 18) * box
-  };
+/* ================= WEB3 LOGIC ================= */
+async function connectWallet() {
+    if (!window.ethereum) return alert("Please install Coinbase Wallet or MetaMask");
+    
+    try {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        
+        const network = await provider.getNetwork();
+        
+        // 8453 = Base Mainnet
+        // 84532 = Base Sepolia (Testnet)
+        // If you are on Sepolia, ensure your wallet is also on Sepolia
+        if (network.chainId !== 8453 && network.chainId !== 84532) {
+             alert("Please switch to Base Network!");
+        }
+
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        document.getElementById("walletDisplay").innerHTML = 
+            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+
+        checkRegistration();
+        fetchLeaderboard();
+
+    } catch (err) {
+        console.error(err);
+        alert("Connection Failed");
+    }
+}
+
+async function checkRegistration() {
+    try {
+        const player = await contract.getPlayer(userAddress);
+        if (!player[0]) {
+            showScreen('screen-register');
+        } else {
+            currentUsername = player[0];
+            document.getElementById("welcomeMsg").innerText = `HI, ${currentUsername.toUpperCase()}`;
+            document.getElementById("personalBest").innerText = player[1].toString();
+            showScreen('screen-start');
+        }
+    } catch (e) {
+        console.log("Contract not found or error", e);
+        // If contract call fails, usually means user not on correct network or contract not found
+        alert("Could not read contract. Are you on the right network?");
+    }
+}
+
+async function registerUser() {
+    const name = document.getElementById("usernameInput").value;
+    if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
+
+    try {
+        const tx = await contract.registerUser(name);
+        document.querySelector('#screen-register button').innerText = "REGISTERING...";
+        await tx.wait();
+        
+        currentUsername = name;
+        showScreen('screen-start');
+    } catch (err) {
+        alert("Registration failed: " + err.message);
+        document.querySelector('#screen-register button').innerText = "REGISTER";
+    }
+}
+
+async function submitScore() {
+    if (!contract) return;
+    try {
+        const btn = document.getElementById('btnSave');
+        btn.innerText = "SIGNING...";
+        btn.disabled = true;
+
+        const tx = await contract.saveScore(score);
+        btn.innerText = "MINING...";
+        await tx.wait();
+        
+        btn.innerText = "SAVED! ✅";
+        fetchLeaderboard(); 
+    } catch (err) {
+        alert("Error saving: " + err.message);
+        document.getElementById('btnSave').disabled = false;
+        document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
+    }
+}
+
+/* ================= LEADERBOARD LOGIC ================= */
+async function fetchLeaderboard() {
+    if (!contract) return;
+    
+    // We scan the last 5000 blocks for "NewScore" events
+    const filter = contract.filters.NewScore();
+    const events = await contract.queryFilter(filter, -5000); 
+
+    const currentMonth = new Date().getMonth();
+    let scores = [];
+
+    events.forEach(e => {
+        const d = new Date(e.args.timestamp * 1000);
+        if (d.getMonth() === currentMonth) {
+            scores.push({
+                name: e.args.username,
+                score: e.args.score.toNumber()
+            });
+        }
+    });
+
+    scores.sort((a,b) => b.score - a.score);
+    const top5 = scores.slice(0, 5);
+
+    const list = document.getElementById("leaderboardList");
+    if(top5.length === 0) {
+        list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores this month yet!</div>";
+    } else {
+        list.innerHTML = top5.map((s, i) => `
+            <div class="lb-row">
+                <span class="lb-rank">#${i+1}</span>
+                <span class="lb-name">${s.name}</span>
+                <span class="lb-score">${s.score}</span>
+            </div>
+        `).join('');
+    }
+}
+
+/* ================= GAME LOGIC ================= */
+function startGame() {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    
+    snake = [{ x: 10 * box, y: 10 * box }];
+    dir = "RIGHT";
+    nextDir = "RIGHT";
+    score = 0;
+    document.getElementById("scoreDisplay").innerText = "SCORE: 0";
+    
+    placeFood();
+    isPlaying = true;
+    
+    if (gameLoop) clearInterval(gameLoop);
+    gameLoop = setInterval(draw, 100);
+}
+
+function placeFood() {
+    const cols = Math.floor(canvas.width / box);
+    const rows = Math.floor(canvas.height / box);
+    food = {
+        x: Math.floor(Math.random() * cols) * box,
+        y: Math.floor(Math.random() * rows) * box
+    };
 }
 
 function draw() {
-  if (!gameRunning) return;
+    // Background
+    ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Food
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "#ff00ff";
+    ctx.fillStyle = "#ff00ff";
+    ctx.fillRect(food.x, food.y, box-2, box-2);
+    ctx.shadowBlur = 0;
 
-  snake.forEach((s, i) => {
-    ctx.fillStyle = i === 0 ? "#00e5ff" : "#00ff88";
-    ctx.fillRect(s.x, s.y, box, box);
-  });
+    // Snake
+    for (let i = 0; i < snake.length; i++) {
+        ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
+        ctx.shadowBlur = (i === 0) ? 10 : 0;
+        ctx.shadowColor = "#ffffff";
+        ctx.fillRect(snake[i].x, snake[i].y, box-2, box-2);
+        ctx.shadowBlur = 0;
+    }
 
-  ctx.fillStyle = "#ff4081";
-  ctx.fillRect(food.x, food.y, box, box);
+    // Movement
+    let snakeX = snake[0].x;
+    let snakeY = snake[0].y;
 
-  let head = { ...snake[0] };
-  if (dir === "UP") head.y -= box;
-  if (dir === "DOWN") head.y += box;
-  if (dir === "LEFT") head.x -= box;
-  if (dir === "RIGHT") head.x += box;
+    dir = nextDir; 
+    if (dir === "LEFT") snakeX -= box;
+    if (dir === "UP") snakeY -= box;
+    if (dir === "RIGHT") snakeX += box;
+    if (dir === "DOWN") snakeY += box;
 
-  if (head.x === food.x && head.y === food.y) {
-    score++;
-    document.getElementById("score").innerText = "Score: " + score;
-    food = randomFood();
-  } else {
-    snake.pop();
-  }
+    // Boundary & Self Collision
+    if (snakeX < 0 || snakeX >= canvas.width || snakeY < 0 || snakeY >= canvas.height || collision(snakeX, snakeY, snake)) {
+        gameOver();
+        return;
+    }
 
-  if (
-    head.x < 0 || head.y < 0 ||
-    head.x >= canvas.width || head.y >= canvas.height ||
-    snake.some(s => s.x === head.x && s.y === head.y)
-  ) {
-    endGame();
-    return;
-  }
+    if (snakeX === food.x && snakeY === food.y) {
+        score++;
+        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        placeFood();
+    } else {
+        snake.pop();
+    }
 
-  snake.unshift(head);
+    let newHead = { x: snakeX, y: snakeY };
+    snake.unshift(newHead);
 }
 
-function endGame() {
-  gameRunning = false;
-  clearInterval(gameInterval);
-
-  if (walletConnected && contract) {
-    saveScoreOnChain(score);
-  }
-
-  setTimeout(() => {
-    alert("Game Over! Restarting...");
-    resetGame();
-  }, 150);
+function collision(x, y, array) {
+    for (let i = 0; i < array.length; i++) {
+        if (x === array[i].x && y === array[i].y) return true;
+    }
+    return false;
 }
 
-/* ================= BASE MAINNET SCORE CONTRACT ================= */
-const CONTRACT_ADDRESS = "0x5Fc4C115C2509D1989d0918E8C1827cb3A8EF8ad";
-
-const ABI = [
-  "function saveScore(uint256 score) public",
-  "function globalHighScore() public view returns (uint256)"
-];
-
-let provider, signer, contract;
-let walletConnected = false;
-
-async function connectWallet() {
-  if (!window.ethereum) {
-    alert("Open this game inside MetaMask / Base Wallet browser");
-    return;
-  }
-
-  provider = new ethers.providers.Web3Provider(window.ethereum);
-  await provider.send("eth_requestAccounts", []);
-
-  const network = await provider.getNetwork();
-  if (network.chainId !== 8453) {
-    alert("Please switch MetaMask to Base network");
-    return;
-  }
-
-  signer = provider.getSigner();
-  contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-  walletConnected = true;
-
-  const addr = await signer.getAddress();
-  document.getElementById("wallet").innerText =
-    "Connected: " + addr.slice(0,6) + "..." + addr.slice(-4);
-
-  loadGlobalHighScore();
-  loadLeaderboard();
+function gameOver() {
+    isPlaying = false;
+    clearInterval(gameLoop);
+    
+    showScreen('screen-gameover');
+    animateScore(score); // Trigger Animation
+    
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
 }
 
-async function loadGlobalHighScore() {
-  if (!contract) return;
-  const hs = await contract.globalHighScore();
-  document.getElementById("highscore").innerText =
-    "On-chain High Score: " + hs.toString();
+/* ================= CONTROLS ================= */
+// Keyboard Controls (Arrows + WASD)
+document.addEventListener("keydown", direction);
+function direction(event) {
+    const key = event.keyCode;
+    
+    // Left: ArrowLeft (37) or A (65)
+    if ((key == 37 || key == 65) && dir != "RIGHT") nextDir = "LEFT";
+    
+    // Up: ArrowUp (38) or W (87)
+    else if ((key == 38 || key == 87) && dir != "DOWN") nextDir = "UP";
+    
+    // Right: ArrowRight (39) or D (68)
+    else if ((key == 39 || key == 68) && dir != "LEFT") nextDir = "RIGHT";
+    
+    // Down: ArrowDown (40) or S (83)
+    else if ((key == 40 || key == 83) && dir != "UP") nextDir = "DOWN";
 }
 
-async function saveScoreOnChain(score) {
-  const tx = await contract.saveScore(score);
-  await tx.wait();
+// Touch / Swipe
+let touchStartX = 0;
+let touchStartY = 0;
 
-  const addr = await signer.getAddress();
-  updateLeaderboard(addr, score);
+document.addEventListener('touchstart', function(event) {
+    touchStartX = event.changedTouches[0].screenX;
+    touchStartY = event.changedTouches[0].screenY;
+}, false);
 
-  setTimeout(loadGlobalHighScore, 1000);
+document.addEventListener('touchend', function(event) {
+    let touchEndX = event.changedTouches[0].screenX;
+    let touchEndY = event.changedTouches[0].screenY;
+    handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+}, false);
+
+function handleSwipe(startX, startY, endX, endY) {
+    let xDiff = endX - startX;
+    let yDiff = endY - startY;
+
+    if (Math.abs(xDiff) > Math.abs(yDiff)) {
+        if (xDiff > 0 && dir != "LEFT") nextDir = "RIGHT";
+        else if (xDiff < 0 && dir != "RIGHT") nextDir = "LEFT";
+    } else {
+        if (yDiff > 0 && dir != "UP") nextDir = "DOWN";
+        else if (yDiff < 0 && dir != "DOWN") nextDir = "UP";
+    }
 }
-
-/* ================= LEADERBOARD ================= */
-function loadLeaderboard() {
-  const data = JSON.parse(localStorage.getItem("baseSnakeLeaderboard")) || [];
-  renderLeaderboard(data);
-}
-
-function updateLeaderboard(address, score) {
-  let data = JSON.parse(localStorage.getItem("baseSnakeLeaderboard")) || [];
-
-  const existing = data.find(e => e.address === address);
-  if (existing) {
-    if (score <= existing.score) return;
-    existing.score = score;
-  } else {
-    data.push({ address, score });
-  }
-
-  data.sort((a, b) => b.score - a.score);
-  data = data.slice(0, 10);
-
-  localStorage.setItem("baseSnakeLeaderboard", JSON.stringify(data));
-  renderLeaderboard(data);
-}
-
-function renderLeaderboard(data) {
-  const el = document.getElementById("leaderboardList");
-  if (!data.length) {
-    el.innerHTML = "<em>No scores yet</em>";
-    return;
-  }
-
-  el.innerHTML = data.map((e, i) => `
-    <div>
-      ${i + 1}. ${e.address.slice(0,6)}…${e.address.slice(-4)}
-      — <strong>${e.score}</strong>
-    </div>
-  `).join("");
-}
-
-/* ================= START ================= */
-resetGame();
-loadLeaderboard();
 </script>
 </body>
 </html>
