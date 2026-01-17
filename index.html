@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Base Snake 🟦</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta name="application-name" content="Base Snake">
+<meta name="description" content="Snake game with on-chain scores on Base">
+<meta name="theme-color" content="#00e5ff">
+
+<style>
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #0f2027, #203a43, #2c5364);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #00e5ff;
+  font-family: Arial, sans-serif;
+}
+
+h1 { margin: 10px; }
+
+canvas {
+  background: #000;
+  border: 4px solid #00e5ff;
+  border-radius: 12px;
+}
+
+#score, #highscore {
+  margin: 6px;
+  font-size: 18px;
+}
+
+#leaderboard {
+  margin-top: 12px;
+  width: 280px;
+  text-align: left;
+  background: rgba(0,0,0,0.4);
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(3, 60px);
+  gap: 10px;
+  margin-top: 15px;
+}
+
+button {
+  height: 60px;
+  border-radius: 12px;
+  border: none;
+  font-size: 22px;
+  background: #00e5ff;
+  color: #000;
+  font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<h1>BASE SNAKE 🟦</h1>
+
+<button onclick="connectWallet()" style="
+  background:#2563eb;
+  color:white;
+  border:none;
+  padding:10px 16px;
+  border-radius:10px;
+  margin-bottom:8px;
+  font-size:16px;">
+  🔗 Connect Wallet (Base)
+</button>
+
+<div id="wallet"></div>
+<div id="score">Score: 0</div>
+<div id="highscore">On-chain High Score: --</div>
+
+<div id="leaderboard">
+  <strong>🏆 Leaderboard</strong>
+  <div id="leaderboardList"><em>No scores yet</em></div>
+</div>
+
+<canvas id="game" width="360" height="360"></canvas>
+
+<div class="controls">
+  <div></div>
+  <button onclick="setDir('UP')">⬆️</button>
+  <div></div>
+  <button onclick="setDir('LEFT')">⬅️</button>
+  <button onclick="setDir('DOWN')">⬇️</button>
+  <button onclick="setDir('RIGHT')">➡️</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+<script>
+/* ================= GAME ================= */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const box = 20;
+
+let snake, dir, food, score;
+let gameInterval = null;
+let gameRunning = false;
+
+function resetGame() {
+  snake = [{ x: 160, y: 160 }];
+  dir = "RIGHT";
+  food = randomFood();
+  score = 0;
+  gameRunning = true;
+  document.getElementById("score").innerText = "Score: 0";
+
+  if (gameInterval) clearInterval(gameInterval);
+  gameInterval = setInterval(draw, 120);
+}
+
+document.addEventListener("keydown", e => {
+  if (!gameRunning) return;
+  if ((e.key === "ArrowUp" || e.key === "w") && dir !== "DOWN") dir = "UP";
+  if ((e.key === "ArrowDown" || e.key === "s") && dir !== "UP") dir = "DOWN";
+  if ((e.key === "ArrowLeft" || e.key === "a") && dir !== "RIGHT") dir = "LEFT";
+  if ((e.key === "ArrowRight" || e.key === "d") && dir !== "LEFT") dir = "RIGHT";
+});
+
+function setDir(d) {
+  if (!gameRunning) return;
+  if (d === "UP" && dir !== "DOWN") dir = "UP";
+  if (d === "DOWN" && dir !== "UP") dir = "DOWN";
+  if (d === "LEFT" && dir !== "RIGHT") dir = "LEFT";
+  if (d === "RIGHT" && dir !== "LEFT") dir = "RIGHT";
+}
+
+function randomFood() {
+  return {
+    x: Math.floor(Math.random() * 18) * box,
+    y: Math.floor(Math.random() * 18) * box
+  };
+}
+
+function draw() {
+  if (!gameRunning) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  snake.forEach((s, i) => {
+    ctx.fillStyle = i === 0 ? "#00e5ff" : "#00ff88";
+    ctx.fillRect(s.x, s.y, box, box);
+  });
+
+  ctx.fillStyle = "#ff4081";
+  ctx.fillRect(food.x, food.y, box, box);
+
+  let head = { ...snake[0] };
+  if (dir === "UP") head.y -= box;
+  if (dir === "DOWN") head.y += box;
+  if (dir === "LEFT") head.x -= box;
+  if (dir === "RIGHT") head.x += box;
+
+  if (head.x === food.x && head.y === food.y) {
+    score++;
+    document.getElementById("score").innerText = "Score: " + score;
+    food = randomFood();
+  } else {
+    snake.pop();
+  }
+
+  if (
+    head.x < 0 || head.y < 0 ||
+    head.x >= canvas.width || head.y >= canvas.height ||
+    snake.some(s => s.x === head.x && s.y === head.y)
+  ) {
+    endGame();
+    return;
+  }
+
+  snake.unshift(head);
+}
+
+function endGame() {
+  gameRunning = false;
+  clearInterval(gameInterval);
+
+  if (walletConnected && contract) {
+    saveScoreOnChain(score);
+  }
+
+  setTimeout(() => {
+    alert("Game Over! Restarting...");
+    resetGame();
+  }, 150);
+}
+
+/* ================= BASE MAINNET SCORE CONTRACT ================= */
+const CONTRACT_ADDRESS = "0x5Fc4C115C2509D1989d0918E8C1827cb3A8EF8ad";
+
+const ABI = [
+  "function saveScore(uint256 score) public",
+  "function globalHighScore() public view returns (uint256)"
+];
+
+let provider, signer, contract;
+let walletConnected = false;
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert("Open this game inside MetaMask / Base Wallet browser");
+    return;
+  }
+
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+
+  const network = await provider.getNetwork();
+  if (network.chainId !== 8453) {
+    alert("Please switch MetaMask to Base network");
+    return;
+  }
+
+  signer = provider.getSigner();
+  contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+  walletConnected = true;
+
+  const addr = await signer.getAddress();
+  document.getElementById("wallet").innerText =
+    "Connected: " + addr.slice(0,6) + "..." + addr.slice(-4);
+
+  loadGlobalHighScore();
+  loadLeaderboard();
+}
+
+async function loadGlobalHighScore() {
+  if (!contract) return;
+  const hs = await contract.globalHighScore();
+  document.getElementById("highscore").innerText =
+    "On-chain High Score: " + hs.toString();
+}
+
+async function saveScoreOnChain(score) {
+  const tx = await contract.saveScore(score);
+  await tx.wait();
+
+  const addr = await signer.getAddress();
+  updateLeaderboard(addr, score);
+
+  setTimeout(loadGlobalHighScore, 1000);
+}
+
+/* ================= LEADERBOARD ================= */
+function loadLeaderboard() {
+  const data = JSON.parse(localStorage.getItem("baseSnakeLeaderboard")) || [];
+  renderLeaderboard(data);
+}
+
+function updateLeaderboard(address, score) {
+  let data = JSON.parse(localStorage.getItem("baseSnakeLeaderboard")) || [];
+
+  const existing = data.find(e => e.address === address);
+  if (existing) {
+    if (score <= existing.score) return;
+    existing.score = score;
+  } else {
+    data.push({ address, score });
+  }
+
+  data.sort((a, b) => b.score - a.score);
+  data = data.slice(0, 10);
+
+  localStorage.setItem("baseSnakeLeaderboard", JSON.stringify(data));
+  renderLeaderboard(data);
+}
+
+function renderLeaderboard(data) {
+  const el = document.getElementById("leaderboardList");
+  if (!data.length) {
+    el.innerHTML = "<em>No scores yet</em>";
+    return;
+  }
+
+  el.innerHTML = data.map((e, i) => `
+    <div>
+      ${i + 1}. ${e.address.slice(0,6)}…${e.address.slice(-4)}
+      — <strong>${e.score}</strong>
+    </div>
+  `).join("");
+}
+
+/* ================= START ================= */
+resetGame();
+loadLeaderboard();
+</script>
+</body>
+</html>
