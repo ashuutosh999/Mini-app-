@@ -1,0 +1,16 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "miniapp": {
+    "version": "0.0.1",
+    "name": "Base Snake",
+    "description": "Play Snake on Base and save your score on-chain!",
+    "iconUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
+    "homeUrl": "https://REPLACE-WITH-YOUR-VERCEL-LINK.vercel.app", 
+    "splashImageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
+    "splashBackgroundColor": "#050510"
+  }
+}
