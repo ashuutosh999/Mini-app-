@@ -632,10 +632,21 @@ function draw() {
             // Cut snake in half immediately
             const newLen = Math.max(1, Math.floor(snake.length / 2));
             snake = snake.slice(0, newLen);
+            
+            // --- NEW: Cut Score in Half ---
+            score = Math.floor(score / 2);
+            
         } else if (activePowerUp.type === 'DOUBLE') {
             // Add current length to buffer to grow over time
             growthPending += snake.length;
+            
+            // --- NEW: Double the Score ---
+            score = score * 2;
         }
+        
+        // Update Score Display immediately
+        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        
         activePowerUp = null; // Remove the item
     }
 
