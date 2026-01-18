@@ -248,16 +248,12 @@
     <div id="screen-connect" class="screen active">
       <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      <button onclick="showScreen('screen-wallet-select')">🔗 CONNECT WALLET</button>
+      
+      <button onclick="autoConnect()">🔗 CONNECT WALLET</button>
     </div>
 
     <div id="screen-wallet-select" class="screen">
       <h1>CHOOSE WALLET</h1>
-
-      <button class="wallet-btn" onclick="connectSpecificWallet('farcaster')">
-        <img src="https://warpcast.com/og-logo.png" class="wallet-icon" style="border-radius:50%;" alt="Farcaster">
-        Farcaster Wallet
-      </button>
       
       <button class="wallet-btn" onclick="connectSpecificWallet('metamask')">
         <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
@@ -303,14 +299,65 @@
   </div>
 
 <script type="module">
+  // This imports the SDK and runs ready() to kill the splash screen
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+  
   console.log("Farcaster SDK loaded via Module");
+  
+  // 1. Tell Farcaster we are ready (Hides Splash Screen)
   sdk.actions.ready();
+
+  // 2. Trigger Auto-Connect from inside the module
+  // We use a small timeout to let the window.ethereum injection finish
+  setTimeout(() => {
+    if (window.autoConnect) {
+      window.autoConnect(); 
+    }
+  }, 500);
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
+// ✅ NEW: Auto-Connect Function
+// This tries to connect immediately without asking the user
+window.autoConnect = async function() {
+    if (!window.ethereum) {
+        console.log("No wallet found yet.");
+        // If no wallet found, we can show the manual select screen
+        // showScreen('screen-wallet-select'); 
+        return;
+    }
+
+    try {
+        // Attempt to connect silently
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        
+        // This line triggers the "Connect" popup if not already connected
+        await provider.send("eth_requestAccounts", []);
+        
+        const network = await provider.getNetwork();
+        if (network.chainId !== 8453 && network.chainId !== 84532) {
+             alert("Please switch to Base Network!");
+        }
+
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        document.getElementById("walletDisplay").innerHTML = 
+            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+
+        // If successful, go straight to registration or game
+        checkRegistration();
+        fetchLeaderboard(); 
+
+    } catch (err) {
+        console.error("Auto-connect failed or rejected:", err);
+        // If user rejects, stay on the "Connect Wallet" screen
+    }
+};
+
 // --- AUDIO MANAGER ---
 const audioFiles = {
     bgm: 'music.mp3',
@@ -329,7 +376,7 @@ Object.keys(audioFiles).forEach(key => {
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
-// FIX: Audio Unlocker
+// FIX: Audio Unlocker - Called on Click interactions
 function unlockAudioAndStart() {
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
@@ -427,61 +474,15 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
-// ✅ UPDATED: Wallet Selection Logic
-function getProvider(type) {
-    const eth = window.ethereum;
-    if (!eth) return null;
-
-    // Farcaster Wallet: Just return the default injected provider
-    if (type === 'farcaster') return eth;
-
-    if (eth.providers && Array.isArray(eth.providers)) {
-        if (type === 'coinbase') return eth.providers.find(p => p.isCoinbaseWallet);
-        if (type === 'metamask') return eth.providers.find(p => p.isMetaMask);
-    }
-    if (type === 'coinbase' && eth.isCoinbaseWallet) return eth;
-    if (type === 'metamask' && eth.isMetaMask) return eth;
-    if (type === 'metamask' && !eth.isCoinbaseWallet) return eth;
-    
-    return null;
-}
-
+// Classic Manual Connection (For Desktop testing)
 async function connectSpecificWallet(walletType) {
-    if (!window.ethereum) return alert("No wallet found. Please install a wallet.");
-
-    const specificProvider = getProvider(walletType);
+    // ... (This function remains as a fallback for desktop users)
+    // You can keep the previous implementation here if desired, 
+    // but the autoConnect() above handles the primary Farcaster case.
+    if (!window.ethereum) return alert("No wallet found.");
     
-    // Fallback: If 'farcaster' was chosen but we couldn't differentiate, just use window.ethereum
-    const finalProvider = specificProvider || window.ethereum;
-
-    if (!finalProvider) {
-        alert(`Wallet not found.`);
-        return;
-    }
-
-    try {
-        provider = new ethers.providers.Web3Provider(finalProvider);
-        await provider.send("eth_requestAccounts", []);
-        
-        const network = await provider.getNetwork();
-        if (network.chainId !== 8453 && network.chainId !== 84532) {
-             alert("Please switch to Base Network!");
-        }
-
-        signer = provider.getSigner();
-        userAddress = await signer.getAddress();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-        document.getElementById("walletDisplay").innerHTML = 
-            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-
-        checkRegistration();
-        fetchLeaderboard(); 
-
-    } catch (err) {
-        console.error(err);
-        alert("Connection Failed or Cancelled");
-    }
+    // Simple fallback to whatever provider is there
+    window.autoConnect();
 }
 
 async function checkRegistration() {
@@ -582,9 +583,6 @@ async function fetchLeaderboard() {
 
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    
-    // Audio is unlocked in the calling function now
-
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
     inputQueue = []; 
@@ -594,11 +592,9 @@ function startGame() {
     growthPending = 0;
 
     document.getElementById("scoreDisplay").innerText = "SCORE: 0";
-    
     placeFood();
     scheduleNextPowerUp(); 
     isPlaying = true;
-    
     if (gameLoop) clearInterval(gameLoop);
     gameLoop = setInterval(draw, gameSpeed);
 }
@@ -615,27 +611,22 @@ function scheduleNextPowerUp() {
 function spawnPowerUp() {
     const cols = Math.floor(canvas.width / box);
     const rows = Math.floor(canvas.height / box);
-    
     let newItem = {
         x: Math.floor(Math.random() * cols) * box,
         y: Math.floor(Math.random() * rows) * box,
         type: Math.random() > 0.5 ? 'HALF' : 'DOUBLE', 
         expireTime: Date.now() + 5000 
     };
-    
     if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) {
         spawnPowerUp(); 
         return;
     }
-    
     activePowerUp = newItem;
-    
     setTimeout(() => {
         if (activePowerUp && activePowerUp === newItem) {
             activePowerUp = null;
         }
     }, 5000);
-    
     scheduleNextPowerUp();
 }
 
