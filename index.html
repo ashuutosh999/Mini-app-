@@ -2,28 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Base Snake 🟦</title>
+<title>Base Snakes 🟦</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0052FF">
 
-<meta property="og:title" content="Base Snake 🐍" />
+<meta property="og:title" content="Base Snakes 🐍" />
 <meta property="og:description" content="Play the ultimate crypto snake game on Base!" />
 <meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
-
-<meta property="fc:frame" content="vNext" />
-<meta property="fc:frame:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
-<meta property="fc:frame:button:1" content="Play Base Snake 🐍" />
-<meta property="fc:frame:button:1:action" content="link" />
-<meta property="fc:frame:button:1:target" content="https://mini-app-phi-ashen.vercel.app/" />
 
 <meta property="fc:miniapp" content='{
   "version": "next",
   "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
   "button": {
-    "title": "Play Base Snake",
+    "title": "Play Base Snakes",
     "action": {
       "type": "launch_miniapp",
-      "name": "Base Snake",
+      "name": "Base Snakes",
       "url": "https://mini-app-phi-ashen.vercel.app/", 
       "splashImageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
       "splashBackgroundColor": "#050510"
@@ -252,9 +246,9 @@
   <div id="ui-layer">
     
     <div id="screen-connect" class="screen active">
-      <h1>BASE SNAKE</h1>
+      <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      <button onclick="showScreen('screen-wallet-select')">🔗 CONNECT WALLET</button>
+      <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
     </div>
 
     <div id="screen-wallet-select" class="screen">
@@ -303,15 +297,83 @@
 
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@0.0.1/dist/index.min.js"></script>
+<script type="module">
+  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+  
+  // 1. Ready signal for Farcaster
+  sdk.actions.ready();
+
+  // 2. Trigger Auto-Connect logic with a small delay for mobile injection
+  setTimeout(() => {
+    if (window.autoConnect) {
+        window.autoConnect(); 
+    }
+  }, 300);
+</script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-window.addEventListener('DOMContentLoaded', () => {
-    if (window.farcaster && window.farcaster.sdk) {
-        window.farcaster.sdk.actions.ready();
-    }
-});
+// ✅ FIXED: Robust Wallet Polling
+// This will keep looking for the wallet for 3 seconds on mobile
+window.autoConnect = function() {
+    const btn = document.getElementById("mainConnectBtn");
+    if(btn) btn.innerText = "DETECTING...";
+
+    let attempts = 0;
+    const maxAttempts = 30; // 3 seconds total
+
+    // Create a loop that checks every 100ms
+    const checkInterval = setInterval(async () => {
+        attempts++;
+        
+        // Check if Ethereum provider is injected
+        if (window.ethereum) {
+            clearInterval(checkInterval); // Found it! Stop checking.
+            
+            if(btn) btn.innerText = "CONNECTING...";
+            
+            try {
+                // Initialize Ethers with the found provider
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                
+                // Check Network
+                const network = await provider.getNetwork();
+                if (network.chainId !== 8453 && network.chainId !== 84532) {
+                     alert("Please switch to Base Network!");
+                }
+
+                // Setup Contracts
+                signer = provider.getSigner();
+                userAddress = await signer.getAddress();
+                contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+                // Update UI
+                document.getElementById("walletDisplay").innerHTML = 
+                    `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+
+                // Proceed to Game
+                checkRegistration();
+                fetchLeaderboard();
+
+            } catch (err) {
+                console.error("Connection failed:", err);
+                if(btn) btn.innerText = "RETRY CONNECT";
+            }
+
+        } else if (attempts >= maxAttempts) {
+            // Timed out (Wallet not found after 3 seconds)
+            clearInterval(checkInterval);
+            console.log("No wallet detected.");
+            if(btn) btn.innerText = "🔗 CONNECT WALLET"; 
+            
+            // Optional: If auto-fail, show the manual select screen as fallback
+            // showScreen('screen-wallet-select');
+        }
+    }, 100); // Check every 100ms
+};
+
 
 // --- AUDIO MANAGER ---
 const audioFiles = {
@@ -333,31 +395,24 @@ sounds.bgm.volume = 0.4;
 
 // FIX: Audio Unlocker - Called on Click interactions
 function unlockAudioAndStart() {
-    // 1. "Touch" all sounds to unlock them on mobile browsers
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
             snd.muted = true;
-            snd.play().catch(e => {}); // Ignore error if already playing
+            snd.play().catch(e => {}); 
             snd.pause();
             snd.currentTime = 0;
             snd.muted = false; 
         }
     });
-
-    // 2. Explicitly restart BGM
     sounds.bgm.currentTime = 0;
     sounds.bgm.play().catch(e => console.log("BGM Start blocked", e));
-
-    // 3. Start Game Loop
     startGame();
 }
 
 // Helper: Play SFX with overlapping support
 function playSound(name) {
     if (!sounds[name]) return;
-    
     if (name !== 'bgm') {
-        // Stop previous instance of SFX to allow rapid replay
         sounds[name].pause();
         sounds[name].currentTime = 0;
         sounds[name].volume = 0.8; 
@@ -373,7 +428,7 @@ function stopMusic() {
 // --- SHARING ---
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
-    const text = `I just scored ${score} on Base Snake! 🐍\n\nCan you beat me? Play now on @base 👇`;
+    const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
     const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
     window.open(intentUrl, '_blank');
 }
@@ -405,14 +460,10 @@ window.addEventListener('resize', setCanvasSize);
 let snake, dir, food, score, gameLoop;
 let isPlaying = false;
 let inputQueue = [];
-
-// SPEED CONFIGURATION
 let gameSpeed = 130; 
-
 let activePowerUp = null; 
 let growthPending = 0;    
 let powerUpTimer = null;  
-
 let provider, signer, contract;
 let userAddress, currentUsername;
 
@@ -440,51 +491,10 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
-function getProvider(type) {
-    const eth = window.ethereum;
-    if (!eth) return null;
-    if (eth.providers && Array.isArray(eth.providers)) {
-        if (type === 'coinbase') return eth.providers.find(p => p.isCoinbaseWallet);
-        if (type === 'metamask') return eth.providers.find(p => p.isMetaMask);
-    }
-    if (type === 'coinbase' && eth.isCoinbaseWallet) return eth;
-    if (type === 'metamask' && eth.isMetaMask) return eth;
-    if (type === 'metamask' && !eth.isCoinbaseWallet) return eth;
-    return null;
-}
-
+// Classic Manual Connection (Fallback)
 async function connectSpecificWallet(walletType) {
-    if (!window.ethereum) return alert("No wallet found. Please install MetaMask or Coinbase Wallet.");
-
-    const specificProvider = getProvider(walletType);
-    if (!specificProvider) {
-        alert(`${walletType === 'coinbase' ? 'Coinbase Wallet' : 'MetaMask'} not found.`);
-        return;
-    }
-
-    try {
-        provider = new ethers.providers.Web3Provider(specificProvider);
-        await provider.send("eth_requestAccounts", []);
-        
-        const network = await provider.getNetwork();
-        if (network.chainId !== 8453 && network.chainId !== 84532) {
-             alert("Please switch to Base Network!");
-        }
-
-        signer = provider.getSigner();
-        userAddress = await signer.getAddress();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-        document.getElementById("walletDisplay").innerHTML = 
-            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-
-        checkRegistration();
-        fetchLeaderboard(); 
-
-    } catch (err) {
-        console.error(err);
-        alert("Connection Failed or Cancelled");
-    }
+    // If user clicks a specific wallet manually, use the same logic
+    window.autoConnect();
 }
 
 async function checkRegistration() {
@@ -585,25 +595,18 @@ async function fetchLeaderboard() {
 
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    
-    // Audio is unlocked in the calling function now
-
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
     inputQueue = []; 
     score = 0;
-    
     gameSpeed = 130; 
-    
     activePowerUp = null;
     growthPending = 0;
 
     document.getElementById("scoreDisplay").innerText = "SCORE: 0";
-    
     placeFood();
     scheduleNextPowerUp(); 
     isPlaying = true;
-    
     if (gameLoop) clearInterval(gameLoop);
     gameLoop = setInterval(draw, gameSpeed);
 }
@@ -620,27 +623,22 @@ function scheduleNextPowerUp() {
 function spawnPowerUp() {
     const cols = Math.floor(canvas.width / box);
     const rows = Math.floor(canvas.height / box);
-    
     let newItem = {
         x: Math.floor(Math.random() * cols) * box,
         y: Math.floor(Math.random() * rows) * box,
         type: Math.random() > 0.5 ? 'HALF' : 'DOUBLE', 
         expireTime: Date.now() + 5000 
     };
-    
     if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) {
         spawnPowerUp(); 
         return;
     }
-    
     activePowerUp = newItem;
-    
     setTimeout(() => {
         if (activePowerUp && activePowerUp === newItem) {
             activePowerUp = null;
         }
     }, 5000);
-    
     scheduleNextPowerUp();
 }
 
@@ -731,12 +729,9 @@ function draw() {
     if (snakeX === food.x && snakeY === food.y) {
         score++;
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        
         playSound('eat'); 
-        
         placeFood();
         ateFood = true;
-
         if (score % 5 === 0) {
             increaseSpeed();
         }
@@ -744,7 +739,6 @@ function draw() {
 
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
         playSound('powerup'); 
-        
         if (activePowerUp.type === 'HALF') {
             const newLen = Math.max(1, Math.floor(snake.length / 2));
             snake = snake.slice(0, newLen);
@@ -755,7 +749,6 @@ function draw() {
         }
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
         activePowerUp = null;
-        
         if (score % 5 === 0 && score > 0) {
              increaseSpeed();
         }
@@ -783,10 +776,8 @@ function gameOver() {
     isPlaying = false;
     clearInterval(gameLoop);
     if(powerUpTimer) clearTimeout(powerUpTimer);
-    
     stopMusic(); 
     playSound('gameover'); 
-    
     showScreen('screen-gameover');
     animateScore(score);
     document.getElementById('btnSave').disabled = false;
