@@ -22,7 +22,6 @@
 }' />
 
 <style>
-  /* ... (Keep your existing CSS exactly as it was) ... */
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
 
   :root {
@@ -256,12 +255,10 @@
   </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@0.0.1/dist/index.min.js"></script>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
 // --- REQUIRED: Initialize Mini App ---
-// This tells the Base app that your game has loaded and is ready to show.
 window.addEventListener('DOMContentLoaded', () => {
     if (window.farcaster && window.farcaster.sdk) {
         window.farcaster.sdk.actions.ready();
@@ -294,6 +291,11 @@ window.addEventListener('resize', setCanvasSize);
 const box = 20; 
 let snake, dir, nextDir, food, score, gameLoop;
 let isPlaying = false;
+
+// --- POWER UP VARIABLES ---
+let activePowerUp = null; // { x, y, type: 'HALF' | 'DOUBLE', expireTime }
+let growthPending = 0;    // Used to smoothly double the snake length
+let powerUpTimer = null;  // Handles the random spawning
 
 // --- WALLET STATE ---
 let provider, signer, contract;
@@ -479,13 +481,62 @@ function startGame() {
     dir = "RIGHT";
     nextDir = "RIGHT";
     score = 0;
+    
+    // Reset Power-ups
+    activePowerUp = null;
+    growthPending = 0;
+
     document.getElementById("scoreDisplay").innerText = "SCORE: 0";
     
     placeFood();
+    scheduleNextPowerUp(); // Start random cycle
     isPlaying = true;
     
     if (gameLoop) clearInterval(gameLoop);
     gameLoop = setInterval(draw, 100);
+}
+
+// --- POWER UP FUNCTIONS ---
+function scheduleNextPowerUp() {
+    if (powerUpTimer) clearTimeout(powerUpTimer);
+    
+    // Spawn something randomly between 5 and 15 seconds
+    const delay = Math.random() * 10000 + 5000;
+    
+    powerUpTimer = setTimeout(() => {
+        if (!isPlaying) return;
+        spawnPowerUp();
+    }, delay);
+}
+
+function spawnPowerUp() {
+    const cols = Math.floor(canvas.width / box);
+    const rows = Math.floor(canvas.height / box);
+    
+    let newItem = {
+        x: Math.floor(Math.random() * cols) * box,
+        y: Math.floor(Math.random() * rows) * box,
+        type: Math.random() > 0.5 ? 'HALF' : 'DOUBLE', // 50/50 chance
+        expireTime: Date.now() + 5000 // Lasts 5 seconds
+    };
+    
+    // Safety check: Don't spawn on snake or food
+    if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) {
+        spawnPowerUp(); // Try again
+        return;
+    }
+    
+    activePowerUp = newItem;
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (activePowerUp && activePowerUp === newItem) {
+            activePowerUp = null;
+        }
+    }, 5000);
+    
+    // Prepare the next cycle
+    scheduleNextPowerUp();
 }
 
 function placeFood() {
@@ -498,15 +549,42 @@ function placeFood() {
 }
 
 function draw() {
+    // 1. Draw Background
     ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // 2. Draw Food
     ctx.shadowBlur = 15;
     ctx.shadowColor = "#ff00ff";
     ctx.fillStyle = "#ff00ff";
     ctx.fillRect(food.x, food.y, box-2, box-2);
     ctx.shadowBlur = 0;
 
+    // 3. Draw PowerUp (if active)
+    if (activePowerUp) {
+        if (Date.now() > activePowerUp.expireTime) {
+            activePowerUp = null;
+        } else {
+            const isDouble = activePowerUp.type === 'DOUBLE';
+            // Green for Double, Red for Half
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = isDouble ? "#00ff00" : "#ff0000"; 
+            ctx.fillStyle = isDouble ? "#00ff00" : "#ff0000";
+            
+            ctx.beginPath();
+            ctx.arc(activePowerUp.x + box/2, activePowerUp.y + box/2, box/2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            
+            // Text Label
+            ctx.fillStyle = "white";
+            ctx.font = "10px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(isDouble ? "2x" : "½", activePowerUp.x + box/2, activePowerUp.y + box - 4);
+        }
+    }
+
+    // 4. Draw Snake
     for (let i = 0; i < snake.length; i++) {
         ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
         ctx.shadowBlur = (i === 0) ? 10 : 0;
@@ -515,6 +593,7 @@ function draw() {
         ctx.shadowBlur = 0;
     }
 
+    // 5. Calculate Movement
     let snakeX = snake[0].x;
     let snakeY = snake[0].y;
 
@@ -524,19 +603,55 @@ function draw() {
     if (dir === "RIGHT") snakeX += box;
     if (dir === "DOWN") snakeY += box;
 
-    if (snakeX < 0 || snakeX >= canvas.width || snakeY < 0 || snakeY >= canvas.height || collision(snakeX, snakeY, snake)) {
+    // --- NEW: Wall Wrapping ---
+    // If it hits wall, transport to other side
+    if (snakeX < 0) snakeX = canvas.width - box;
+    else if (snakeX >= canvas.width) snakeX = 0;
+    
+    if (snakeY < 0) snakeY = canvas.height - box;
+    else if (snakeY >= canvas.height) snakeY = 0;
+
+    // 6. Check Self Collision
+    if (collision(snakeX, snakeY, snake)) {
         gameOver();
         return;
     }
 
+    // 7. Check Food
+    let ateFood = false;
     if (snakeX === food.x && snakeY === food.y) {
         score++;
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
         placeFood();
+        ateFood = true;
+    }
+
+    // 8. Check PowerUp Collision
+    if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
+        if (activePowerUp.type === 'HALF') {
+            // Cut snake in half immediately
+            const newLen = Math.max(1, Math.floor(snake.length / 2));
+            snake = snake.slice(0, newLen);
+        } else if (activePowerUp.type === 'DOUBLE') {
+            // Add current length to buffer to grow over time
+            growthPending += snake.length;
+        }
+        activePowerUp = null; // Remove the item
+    }
+
+    // 9. Move Tail (Grow logic)
+    // If we ate food OR have pending growth (from 2x powerup), we don't pop the tail.
+    if (ateFood) {
+        // Just ate food, naturally grows by 1 (by not popping)
+    } else if (growthPending > 0) {
+        // Using "2x" buffer, grow by 1 this frame (by not popping)
+        growthPending--;
     } else {
+        // Normal movement, remove tail
         snake.pop();
     }
 
+    // 10. Add New Head
     let newHead = { x: snakeX, y: snakeY };
     snake.unshift(newHead);
 }
@@ -551,6 +666,7 @@ function collision(x, y, array) {
 function gameOver() {
     isPlaying = false;
     clearInterval(gameLoop);
+    if(powerUpTimer) clearTimeout(powerUpTimer);
     showScreen('screen-gameover');
     animateScore(score);
     document.getElementById('btnSave').disabled = false;
