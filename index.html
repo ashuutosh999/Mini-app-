@@ -54,7 +54,7 @@
     touch-action: none; 
   }
 
-  /* NEW: Developer Credit Styling */
+  /* Developer Credit */
   .dev-credit {
     position: absolute;
     top: 10px;
@@ -158,7 +158,7 @@
     font-size: 18px;
     font-weight: bold;
     text-shadow: 0 0 5px var(--neon-blue);
-    margin-top: 25px; /* Pushed down slightly for dev credit */
+    margin-top: 25px; 
   }
 
   canvas {
@@ -288,19 +288,37 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- AUDIO SETUP ---
-const bgm = new Audio('music.mp3');
-bgm.loop = true; 
-bgm.volume = 0.5;
+// --- IMPROVED AUDIO SETUP ---
+// We use a caching system to ensure sounds play instantly and can overlap
+const sounds = {
+    bgm: new Audio('music.mp3'),
+    eat: new Audio('eat.mp3'),
+    powerup: new Audio('powerup.mp3'),
+    gameover: new Audio('gameover.mp3')
+};
 
-const sndEat = new Audio('eat.mp3');
-const sndPower = new Audio('powerup.mp3');
-const sndOver = new Audio('gameover.mp3');
+sounds.bgm.loop = true; 
+sounds.bgm.volume = 0.4;
 
-function playSound(audioObj) {
-    const sound = audioObj.cloneNode();
-    sound.volume = 0.6;
-    sound.play().catch(e => console.log("Audio not loaded yet"));
+// Helper: Clones the audio buffer so we can play the same sound multiple times rapidly
+function playSound(name) {
+    if (!sounds[name]) return;
+    
+    // For background music, just play it normally
+    if (name === 'bgm') {
+        sounds.bgm.currentTime = 0;
+        sounds.bgm.play().catch(e => console.log("BGM blocked by browser"));
+        return;
+    }
+
+    // For SFX, create a clone to allow overlapping sounds
+    const clone = sounds[name].cloneNode();
+    clone.volume = 0.8; // Louder SFX
+    clone.play().catch(e => console.log("SFX blocked or file missing: " + name));
+}
+
+function stopMusic() {
+    sounds.bgm.pause();
 }
 
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
@@ -330,8 +348,8 @@ let snake, dir, food, score, gameLoop;
 let isPlaying = false;
 let inputQueue = [];
 
-// NEW: Game Speed Variable
-let gameSpeed = 180; // Start Slower (180ms)
+// SPEED CONFIGURATION
+let gameSpeed = 130; // UPDATED: Starts faster (130ms)
 
 let activePowerUp = null; 
 let growthPending = 0;    
@@ -510,16 +528,16 @@ async function fetchLeaderboard() {
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     
-    bgm.currentTime = 0;
-    bgm.play().catch(e => console.log("Music failed (User gesture needed)"));
+    // Play BGM with updated system
+    playSound('bgm');
 
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
     inputQueue = []; 
     score = 0;
     
-    // RESET SPEED
-    gameSpeed = 180; 
+    // RESET SPEED (130ms)
+    gameSpeed = 130; 
     
     activePowerUp = null;
     growthPending = 0;
@@ -579,10 +597,10 @@ function placeFood() {
     };
 }
 
-// NEW: Function to handle speed increase
+// Function to handle speed increase
 function increaseSpeed() {
-    if (gameSpeed > 80) { // Don't get faster than 80ms
-        gameSpeed -= 10; // Increase speed by reducing delay
+    if (gameSpeed > 60) { // Don't get faster than 60ms
+        gameSpeed -= 5; // UPDATED: Decrease by 5ms for smoother progression
         clearInterval(gameLoop);
         gameLoop = setInterval(draw, gameSpeed);
     }
@@ -658,18 +676,21 @@ function draw() {
     if (snakeX === food.x && snakeY === food.y) {
         score++;
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        playSound(sndEat);
+        
+        playSound('eat'); // Updated Sound Call
+        
         placeFood();
         ateFood = true;
 
-        // NEW: Check if we need to speed up
-        if (score % 10 === 0) {
+        // UPDATED: Increase speed every 5 points
+        if (score % 5 === 0) {
             increaseSpeed();
         }
     }
 
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
-        playSound(sndPower);
+        playSound('powerup'); // Updated Sound Call
+        
         if (activePowerUp.type === 'HALF') {
             const newLen = Math.max(1, Math.floor(snake.length / 2));
             snake = snake.slice(0, newLen);
@@ -681,8 +702,7 @@ function draw() {
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
         activePowerUp = null;
         
-        // Check speed after powerup (optional, but good if score jumped)
-        if (score % 10 === 0 && score > 0) {
+        if (score % 5 === 0 && score > 0) {
              increaseSpeed();
         }
     }
@@ -710,8 +730,8 @@ function gameOver() {
     clearInterval(gameLoop);
     if(powerUpTimer) clearTimeout(powerUpTimer);
     
-    bgm.pause();
-    playSound(sndOver);
+    stopMusic(); // Stop BG Music
+    playSound('gameover'); // Play Game Over Sound
     
     showScreen('screen-gameover');
     animateScore(score);
