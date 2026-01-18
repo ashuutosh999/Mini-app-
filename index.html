@@ -266,7 +266,7 @@
     <div id="screen-start" class="screen">
       <h1 id="welcomeMsg">WELCOME</h1>
       <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
-      <button onclick="startGame()">▶ START GAME</button>
+      <button onclick="unlockAudioAndStart()">▶ START GAME</button>
     </div>
 
     <div id="screen-gameover" class="screen">
@@ -288,33 +288,54 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- IMPROVED AUDIO SETUP ---
-// We use a caching system to ensure sounds play instantly and can overlap
-const sounds = {
-    bgm: new Audio('music.mp3'),
-    eat: new Audio('eat.mp3'),
-    powerup: new Audio('powerup.mp3'),
-    gameover: new Audio('gameover.mp3')
+// --- ROBUST AUDIO MANAGER ---
+const audioFiles = {
+    bgm: 'music.mp3',
+    eat: 'eat.mp3',
+    powerup: 'powerup.mp3',
+    gameover: 'gameover.mp3'
 };
+
+const sounds = {};
+
+// Preload Audio Objects
+Object.keys(audioFiles).forEach(key => {
+    sounds[key] = new Audio(audioFiles[key]);
+});
 
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
-// Helper: Clones the audio buffer so we can play the same sound multiple times rapidly
+// FIX: Play a tiny bit of every sound to "Unlock" them on iOS/Android
+function unlockAudioAndStart() {
+    // 1. Play everything muted for 0 seconds
+    Object.values(sounds).forEach(snd => {
+        snd.muted = true;
+        snd.play().catch(e => console.log("Unlock blocked", e));
+        snd.pause();
+        snd.currentTime = 0;
+        snd.muted = false; // Unmute for real game
+    });
+
+    // 2. Start game music
+    sounds.bgm.currentTime = 0;
+    sounds.bgm.play().catch(e => console.log("BGM Start blocked", e));
+
+    // 3. Start Game
+    startGame();
+}
+
 function playSound(name) {
     if (!sounds[name]) return;
     
-    // For background music, just play it normally
-    if (name === 'bgm') {
-        sounds.bgm.currentTime = 0;
-        sounds.bgm.play().catch(e => console.log("BGM blocked by browser"));
-        return;
+    // Simple reset and play (most reliable for mobile web)
+    // Cloning nodes can cause memory leaks or delays on some devices
+    if (name !== 'bgm') {
+        sounds[name].pause();
+        sounds[name].currentTime = 0;
+        sounds[name].volume = 0.8; 
+        sounds[name].play().catch(e => console.log(`Sound ${name} failed:`, e));
     }
-
-    // For SFX, create a clone to allow overlapping sounds
-    const clone = sounds[name].cloneNode();
-    clone.volume = 0.8; // Louder SFX
-    clone.play().catch(e => console.log("SFX blocked or file missing: " + name));
 }
 
 function stopMusic() {
@@ -349,7 +370,7 @@ let isPlaying = false;
 let inputQueue = [];
 
 // SPEED CONFIGURATION
-let gameSpeed = 130; // UPDATED: Starts faster (130ms)
+let gameSpeed = 130; // Start at 130ms
 
 let activePowerUp = null; 
 let growthPending = 0;    
@@ -528,8 +549,7 @@ async function fetchLeaderboard() {
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     
-    // Play BGM with updated system
-    playSound('bgm');
+    // NOTE: Audio is unlocked in unlockAudioAndStart() now
 
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
@@ -599,7 +619,7 @@ function placeFood() {
 
 // Function to handle speed increase
 function increaseSpeed() {
-    if (gameSpeed > 60) { // Don't get faster than 60ms
+    if (gameSpeed > 60) { 
         gameSpeed -= 5; // UPDATED: Decrease by 5ms for smoother progression
         clearInterval(gameLoop);
         gameLoop = setInterval(draw, gameSpeed);
@@ -677,7 +697,7 @@ function draw() {
         score++;
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
         
-        playSound('eat'); // Updated Sound Call
+        playSound('eat'); 
         
         placeFood();
         ateFood = true;
@@ -689,7 +709,7 @@ function draw() {
     }
 
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
-        playSound('powerup'); // Updated Sound Call
+        playSound('powerup'); 
         
         if (activePowerUp.type === 'HALF') {
             const newLen = Math.max(1, Math.floor(snake.length / 2));
@@ -730,8 +750,8 @@ function gameOver() {
     clearInterval(gameLoop);
     if(powerUpTimer) clearTimeout(powerUpTimer);
     
-    stopMusic(); // Stop BG Music
-    playSound('gameover'); // Play Game Over Sound
+    stopMusic(); 
+    playSound('gameover'); 
     
     showScreen('screen-gameover');
     animateScore(score);
