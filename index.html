@@ -25,8 +25,6 @@
   }
 }' />
 
-<script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@0.0.1/dist/index.min.js"></script>
-
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
 
@@ -299,27 +297,19 @@
 
   </div>
 
+<script type="module">
+  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+  
+  console.log("Farcaster SDK loaded via Module");
+  
+  // Call ready() immediately to prevent infinite loading screen
+  // Documentation says: "After your app loads, you must call sdk.actions.ready()"
+  sdk.actions.ready();
+</script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-// ✅ FIXED INITIALIZATION LOGIC
-// 1. Wait for window load (ensures scripts are parsed)
-// 2. Poll aggressively (every 100ms) until SDK is found
-window.onload = function() {
-    const checkSDK = setInterval(() => {
-        if (window.farcaster && window.farcaster.sdk) {
-            console.log("SDK Found. Calling Ready.");
-            window.farcaster.sdk.actions.ready();
-            clearInterval(checkSDK); // Stop checking once found
-        } else {
-            console.log("Waiting for Farcaster SDK...");
-        }
-    }, 100);
-    
-    // Fallback: If not found after 5 seconds, clear interval to save memory
-    setTimeout(() => clearInterval(checkSDK), 5000);
-};
-
 // --- AUDIO MANAGER ---
 const audioFiles = {
     bgm: 'music.mp3',
