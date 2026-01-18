@@ -59,7 +59,6 @@
     touch-action: none; 
   }
 
-  /* Developer Credit */
   .dev-credit {
     position: absolute;
     top: 10px;
@@ -142,25 +141,12 @@
   button:active { transform: scale(0.95); }
   button:disabled { background: #555; cursor: not-allowed; }
 
-  /* Share Button Styling */
   .btn-share {
     background: var(--warpcast-purple);
     border: 1px solid #fff;
     box-shadow: 0 0 10px var(--warpcast-purple);
     margin-bottom: 10px;
   }
-
-  .wallet-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: #1a1a2e;
-    border: 1px solid #333;
-    margin-bottom: 10px;
-  }
-  .wallet-btn:hover { background: #2a2a40; border-color: var(--base-blue); }
-  .wallet-icon { width: 24px; height: 24px; }
 
   #hud {
     display: flex;
@@ -248,25 +234,8 @@
     <div id="screen-connect" class="screen active">
       <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
-    </div>
-
-    <div id="screen-wallet-select" class="screen">
-      <h1>CHOOSE WALLET</h1>
       
-      <button class="wallet-btn" onclick="connectSpecificWallet('metamask')">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
-        MetaMask
-      </button>
-
-      <button class="wallet-btn" onclick="connectSpecificWallet('coinbase')">
-        <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
-        Coinbase Wallet
-      </button>
-
-      <div style="margin-top:15px; font-size:12px; color:#666; cursor:pointer;" onclick="showScreen('screen-connect')">
-        ← Go Back
-      </div>
+      <button id="mainConnectBtn" onclick="window.connectFarcasterWallet()">🔗 CONNECT WALLET</button>
     </div>
 
     <div id="screen-register" class="screen">
@@ -280,162 +249,86 @@
     <div id="screen-start" class="screen">
       <h1 id="welcomeMsg">WELCOME</h1>
       <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
-      
       <button onclick="unlockAudioAndStart()">▶ START GAME</button>
     </div>
 
     <div id="screen-gameover" class="screen">
       <h1 style="color:var(--neon-pink)">GAME OVER</h1>
       <p>Score: <span id="finalScore">0</span></p>
-      
       <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
-      
       <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
-      
       <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
     </div>
 
   </div>
 
-<script type="module">
-  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-  
-  // 1. Ready signal for Farcaster
-  sdk.actions.ready();
-
-  // 2. Trigger Auto-Connect logic with a small delay for mobile injection
-  setTimeout(() => {
-    if (window.autoConnect) {
-        window.autoConnect(); 
-    }
-  }, 300);
-</script>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
-<script>
-// ✅ FIXED: Robust Wallet Polling
-// This will keep looking for the wallet for 3 seconds on mobile
-window.autoConnect = function() {
+<script type="module">
+  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+
+  // 1. Initialize immediately
+  console.log("SDK Initializing...");
+  sdk.actions.ready();
+
+  // 2. Define the global connection function
+  // We attach this to 'window' so the HTML button can see it
+  window.connectFarcasterWallet = async () => {
     const btn = document.getElementById("mainConnectBtn");
-    if(btn) btn.innerText = "DETECTING...";
+    if(btn) btn.innerText = "CONNECTING...";
 
-    let attempts = 0;
-    const maxAttempts = 30; // 3 seconds total
-
-    // Create a loop that checks every 100ms
-    const checkInterval = setInterval(async () => {
-        attempts++;
+    try {
+        console.log("Attempting SDK Wallet Connection...");
         
-        // Check if Ethereum provider is injected
-        if (window.ethereum) {
-            clearInterval(checkInterval); // Found it! Stop checking.
-            
-            if(btn) btn.innerText = "CONNECTING...";
-            
-            try {
-                // Initialize Ethers with the found provider
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                
-                // Check Network
-                const network = await provider.getNetwork();
-                if (network.chainId !== 8453 && network.chainId !== 84532) {
-                     alert("Please switch to Base Network!");
-                }
+        // TRY STRATEGY A: SDK Provider (Official Mobile Way)
+        // This is what fixes the "Detecting..." stuck issue
+        const sdkProvider = sdk.provider; 
+        
+        // TRY STRATEGY B: Window Injection (Fallback)
+        const injectedProvider = window.ethereum;
 
-                // Setup Contracts
-                signer = provider.getSigner();
-                userAddress = await signer.getAddress();
-                contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        const activeProvider = sdkProvider || injectedProvider;
 
-                // Update UI
-                document.getElementById("walletDisplay").innerHTML = 
-                    `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-
-                // Proceed to Game
-                checkRegistration();
-                fetchLeaderboard();
-
-            } catch (err) {
-                console.error("Connection failed:", err);
-                if(btn) btn.innerText = "RETRY CONNECT";
-            }
-
-        } else if (attempts >= maxAttempts) {
-            // Timed out (Wallet not found after 3 seconds)
-            clearInterval(checkInterval);
-            console.log("No wallet detected.");
-            if(btn) btn.innerText = "🔗 CONNECT WALLET"; 
-            
-            // Optional: If auto-fail, show the manual select screen as fallback
-            // showScreen('screen-wallet-select');
+        if (!activeProvider) {
+            throw new Error("No wallet provider found in this Mini App environment.");
         }
-    }, 100); // Check every 100ms
-};
 
+        // Initialize Ethers with the found provider
+        // Note: 'any' network helps avoid "unknown network" errors on some mobile wallets
+        const provider = new ethers.providers.Web3Provider(activeProvider, "any");
+        
+        // Force the connect popup
+        await provider.send("eth_requestAccounts", []);
+        
+        // Setup Contracts & UI
+        const signer = provider.getSigner();
+        const userAddress = await signer.getAddress();
+        
+        // Make global so other functions can use them
+        window.web3State = { provider, signer, userAddress };
+        
+        // Update UI
+        document.getElementById("walletDisplay").innerHTML = 
+            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+            
+        // Initialize Game Contract
+        initGameContract(signer);
 
-// --- AUDIO MANAGER ---
-const audioFiles = {
-    bgm: 'music.mp3',
-    eat: 'eat.mp3',
-    powerup: 'powerup.mp3',
-    gameover: 'gameover.mp3'
-};
+        // Move to next screen
+        checkRegistration(userAddress);
 
-const sounds = {};
-
-// Preload Audio
-Object.keys(audioFiles).forEach(key => {
-    sounds[key] = new Audio(audioFiles[key]);
-});
-
-sounds.bgm.loop = true; 
-sounds.bgm.volume = 0.4;
-
-// FIX: Audio Unlocker - Called on Click interactions
-function unlockAudioAndStart() {
-    Object.values(sounds).forEach(snd => {
-        if(snd.paused) {
-            snd.muted = true;
-            snd.play().catch(e => {}); 
-            snd.pause();
-            snd.currentTime = 0;
-            snd.muted = false; 
-        }
-    });
-    sounds.bgm.currentTime = 0;
-    sounds.bgm.play().catch(e => console.log("BGM Start blocked", e));
-    startGame();
-}
-
-// Helper: Play SFX with overlapping support
-function playSound(name) {
-    if (!sounds[name]) return;
-    if (name !== 'bgm') {
-        sounds[name].pause();
-        sounds[name].currentTime = 0;
-        sounds[name].volume = 0.8; 
-        sounds[name].play().catch(e => console.log(`Sound ${name} failed:`, e));
+    } catch (err) {
+        console.error("Wallet Error:", err);
+        alert("Wallet Connect Failed: " + (err.message || err));
+        if(btn) btn.innerText = "RETRY CONNECT";
     }
-}
+  };
+</script>
 
-function stopMusic() {
-    sounds.bgm.pause();
-    sounds.bgm.currentTime = 0;
-}
+<script>
+// --- GAME LOGIC & HELPERS ---
 
-// --- SHARING ---
-function shareScore() {
-    const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
-    const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
-    const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
-    window.open(intentUrl, '_blank');
-}
-
-// --- WEB3 ---
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
-
 const ABI = [
   "function registerUser(string username) public",
   "function saveScore(uint256 score) public",
@@ -444,89 +337,48 @@ const ABI = [
   "event UserRegistered(address indexed player, string username)"
 ];
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const box = 20; 
+let contract; 
 
-const setCanvasSize = () => {
-    let size = Math.min(window.innerWidth - 20, 400);
-    size = Math.floor(size / box) * box; 
-    canvas.width = size;
-    canvas.height = size;
-};
-setCanvasSize();
-window.addEventListener('resize', setCanvasSize);
-
-let snake, dir, food, score, gameLoop;
-let isPlaying = false;
-let inputQueue = [];
-let gameSpeed = 130; 
-let activePowerUp = null; 
-let growthPending = 0;    
-let powerUpTimer = null;  
-let provider, signer, contract;
-let userAddress, currentUsername;
+function initGameContract(signer) {
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+}
 
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
 }
 
-function animateScore(targetScore) {
-    const scoreElement = document.getElementById("finalScore");
-    let current = 0;
-    const duration = 1000;
-    const startTime = performance.now();
-
-    function update(time) {
-        const elapsed = time - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const ease = 1 - Math.pow(1 - progress, 3);
-        current = Math.floor(ease * targetScore);
-        scoreElement.innerText = current;
-
-        if (progress < 1) requestAnimationFrame(update);
-        else scoreElement.innerText = targetScore;
-    }
-    requestAnimationFrame(update);
-}
-
-// Classic Manual Connection (Fallback)
-async function connectSpecificWallet(walletType) {
-    // If user clicks a specific wallet manually, use the same logic
-    window.autoConnect();
-}
-
-async function checkRegistration() {
+async function checkRegistration(addr) {
     try {
-        const player = await contract.getPlayer(userAddress);
+        if(!contract) return;
+        const player = await contract.getPlayer(addr);
         if (!player[0]) {
             showScreen('screen-register');
         } else {
-            currentUsername = player[0];
-            document.getElementById("welcomeMsg").innerText = `HI, ${currentUsername.toUpperCase()}`;
+            document.getElementById("welcomeMsg").innerText = `HI, ${player[0].toUpperCase()}`;
             document.getElementById("personalBest").innerText = player[1].toString();
             showScreen('screen-start');
         }
+        fetchLeaderboard();
     } catch (e) {
-        console.log("Contract Error", e);
-        showScreen('screen-register'); 
+        console.log("Check Reg Error", e);
+        // If error, assume new user or network issue, show start anyway just to be safe
+        showScreen('screen-start'); 
     }
 }
 
 async function registerUser() {
     const name = document.getElementById("usernameInput").value;
     if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
+    if (!contract) return alert("Wallet not connected properly.");
 
     try {
         const tx = await contract.registerUser(name);
         document.querySelector('#screen-register button').innerText = "REGISTERING...";
         await tx.wait();
-        
-        currentUsername = name;
         showScreen('screen-start');
     } catch (err) {
-        alert("Registration failed: " + err.message);
+        alert("Tx Failed: " + err.message);
         document.querySelector('#screen-register button').innerText = "REGISTER";
     }
 }
@@ -537,15 +389,13 @@ async function submitScore() {
         const btn = document.getElementById('btnSave');
         btn.innerText = "SIGNING...";
         btn.disabled = true;
-
         const tx = await contract.saveScore(score);
         btn.innerText = "MINING...";
         await tx.wait();
-        
         btn.innerText = "SAVED! ✅";
         fetchLeaderboard(); 
     } catch (err) {
-        alert("Error saving: " + err.message);
+        alert("Error: " + err.message);
         document.getElementById('btnSave').disabled = false;
         document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
     }
@@ -557,28 +407,19 @@ async function fetchLeaderboard() {
         return;
     }
     try {
+        // Simple leaderboard fetch (optimization: reduce range if slow)
         const filter = contract.filters.NewScore();
         const events = await contract.queryFilter(filter, -5000); 
-
-        const currentMonth = new Date().getMonth();
-        let scores = [];
-
-        events.forEach(e => {
-            const d = new Date(e.args.timestamp * 1000);
-            if (d.getMonth() === currentMonth) {
-                scores.push({
-                    name: e.args.username,
-                    score: e.args.score.toNumber()
-                });
-            }
-        });
-
+        let scores = events.map(e => ({
+            name: e.args.username,
+            score: e.args.score.toNumber()
+        }));
         scores.sort((a,b) => b.score - a.score);
         const top5 = scores.slice(0, 5);
-
+        
         const list = document.getElementById("leaderboardList");
         if(top5.length === 0) {
-            list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores this month yet!</div>";
+            list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores yet!</div>";
         } else {
             list.innerHTML = top5.map((s, i) => `
                 <div class="lb-row">
@@ -588,24 +429,73 @@ async function fetchLeaderboard() {
                 </div>
             `).join('');
         }
-    } catch(e) {
-        console.log("Error loading leaderboard", e);
+    } catch(e) { console.log("LB Error", e); }
+}
+
+// --- GAME & AUDIO (Standard) ---
+const audioFiles = { bgm: 'music.mp3', eat: 'eat.mp3', powerup: 'powerup.mp3', gameover: 'gameover.mp3' };
+const sounds = {};
+Object.keys(audioFiles).forEach(key => { sounds[key] = new Audio(audioFiles[key]); });
+sounds.bgm.loop = true; sounds.bgm.volume = 0.4;
+
+function unlockAudioAndStart() {
+    Object.values(sounds).forEach(snd => {
+        if(snd.paused) { snd.muted=true; snd.play().catch(()=>{}); snd.pause(); snd.currentTime=0; snd.muted=false; }
+    });
+    sounds.bgm.currentTime = 0;
+    sounds.bgm.play().catch(e => {});
+    startGame();
+}
+
+function playSound(name) {
+    if (!sounds[name]) return;
+    if (name !== 'bgm') {
+        sounds[name].pause(); sounds[name].currentTime = 0;
+        sounds[name].volume = 0.8; sounds[name].play().catch(()=>{});
     }
+}
+
+function stopMusic() { sounds.bgm.pause(); }
+
+function shareScore() {
+    const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
+    const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
+    const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
+    window.open(intentUrl, '_blank');
+}
+
+// --- CANVAS & GAME LOOP ---
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const box = 20; 
+const setCanvasSize = () => {
+    let size = Math.min(window.innerWidth - 20, 400);
+    size = Math.floor(size / box) * box; 
+    canvas.width = size; canvas.height = size;
+};
+setCanvasSize();
+window.addEventListener('resize', setCanvasSize);
+
+let snake, dir, food, score, gameLoop;
+let isPlaying = false;
+let inputQueue = [];
+let gameSpeed = 130; 
+let activePowerUp = null; 
+let growthPending = 0;    
+let powerUpTimer = null;  
+
+function animateScore(targetScore) {
+    const el = document.getElementById("finalScore");
+    el.innerText = targetScore; 
 }
 
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     snake = [{ x: 10 * box, y: 10 * box }];
-    dir = "RIGHT";
-    inputQueue = []; 
-    score = 0;
-    gameSpeed = 130; 
-    activePowerUp = null;
-    growthPending = 0;
-
+    dir = "RIGHT"; inputQueue = []; score = 0;
+    gameSpeed = 130; activePowerUp = null; growthPending = 0;
     document.getElementById("scoreDisplay").innerText = "SCORE: 0";
-    placeFood();
-    scheduleNextPowerUp(); 
+    placeFood(); scheduleNextPowerUp(); 
     isPlaying = true;
     if (gameLoop) clearInterval(gameLoop);
     gameLoop = setInterval(draw, gameSpeed);
@@ -613,50 +503,27 @@ function startGame() {
 
 function scheduleNextPowerUp() {
     if (powerUpTimer) clearTimeout(powerUpTimer);
-    const delay = Math.random() * 10000 + 5000;
-    powerUpTimer = setTimeout(() => {
-        if (!isPlaying) return;
-        spawnPowerUp();
-    }, delay);
+    powerUpTimer = setTimeout(() => { if (isPlaying) spawnPowerUp(); }, Math.random() * 10000 + 5000);
 }
 
 function spawnPowerUp() {
     const cols = Math.floor(canvas.width / box);
     const rows = Math.floor(canvas.height / box);
-    let newItem = {
-        x: Math.floor(Math.random() * cols) * box,
-        y: Math.floor(Math.random() * rows) * box,
-        type: Math.random() > 0.5 ? 'HALF' : 'DOUBLE', 
-        expireTime: Date.now() + 5000 
-    };
-    if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) {
-        spawnPowerUp(); 
-        return;
-    }
+    let newItem = { x: Math.floor(Math.random()*cols)*box, y: Math.floor(Math.random()*rows)*box, type: Math.random()>0.5?'HALF':'DOUBLE', expireTime: Date.now()+5000 };
+    if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) return;
     activePowerUp = newItem;
-    setTimeout(() => {
-        if (activePowerUp && activePowerUp === newItem) {
-            activePowerUp = null;
-        }
-    }, 5000);
+    setTimeout(() => { if (activePowerUp === newItem) activePowerUp = null; }, 5000);
     scheduleNextPowerUp();
 }
 
 function placeFood() {
     const cols = Math.floor(canvas.width / box);
     const rows = Math.floor(canvas.height / box);
-    food = {
-        x: Math.floor(Math.random() * cols) * box,
-        y: Math.floor(Math.random() * rows) * box
-    };
+    food = { x: Math.floor(Math.random()*cols)*box, y: Math.floor(Math.random()*rows)*box };
 }
 
 function increaseSpeed() {
-    if (gameSpeed > 60) { 
-        gameSpeed -= 5; 
-        clearInterval(gameLoop);
-        gameLoop = setInterval(draw, gameSpeed);
-    }
+    if (gameSpeed > 60) { gameSpeed -= 5; clearInterval(gameLoop); gameLoop = setInterval(draw, gameSpeed); }
 }
 
 function draw() {
@@ -667,161 +534,82 @@ function draw() {
         else if (next === "RIGHT" && dir !== "LEFT") dir = "RIGHT";
         else if (next === "DOWN" && dir !== "UP") dir = "DOWN";
     }
-
-    ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = "#ff00ff";
-    ctx.fillStyle = "#ff00ff";
-    ctx.fillRect(food.x, food.y, box-2, box-2);
-    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.shadowBlur = 15; ctx.shadowColor = "#ff00ff"; ctx.fillStyle = "#ff00ff"; ctx.fillRect(food.x, food.y, box-2, box-2); ctx.shadowBlur = 0;
 
     if (activePowerUp) {
-        if (Date.now() > activePowerUp.expireTime) {
-            activePowerUp = null;
-        } else {
-            const isDouble = activePowerUp.type === 'DOUBLE';
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = isDouble ? "#00ff00" : "#ff0000"; 
-            ctx.fillStyle = isDouble ? "#00ff00" : "#ff0000";
-            
-            ctx.beginPath();
-            ctx.arc(activePowerUp.x + box/2, activePowerUp.y + box/2, box/2, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            
-            ctx.fillStyle = "white";
-            ctx.font = "10px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(isDouble ? "2x" : "½", activePowerUp.x + box/2, activePowerUp.y + box - 4);
+        if (Date.now() > activePowerUp.expireTime) activePowerUp = null;
+        else {
+            ctx.shadowBlur = 20; ctx.shadowColor = activePowerUp.type==='DOUBLE'?"#00ff00":"#ff0000"; ctx.fillStyle = ctx.shadowColor;
+            ctx.beginPath(); ctx.arc(activePowerUp.x+box/2, activePowerUp.y+box/2, box/2, 0, 2*Math.PI); ctx.fill(); ctx.shadowBlur = 0;
+            ctx.fillStyle = "white"; ctx.font = "10px Arial"; ctx.textAlign = "center"; 
+            ctx.fillText(activePowerUp.type==='DOUBLE'?"2x":"½", activePowerUp.x+box/2, activePowerUp.y+box-4);
         }
     }
 
     for (let i = 0; i < snake.length; i++) {
         ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
-        ctx.shadowBlur = (i === 0) ? 10 : 0;
-        ctx.shadowColor = "#ffffff";
-        ctx.fillRect(snake[i].x, snake[i].y, box-2, box-2);
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = (i===0)?10:0; ctx.shadowColor = "#ffffff";
+        ctx.fillRect(snake[i].x, snake[i].y, box-2, box-2); ctx.shadowBlur = 0;
     }
 
-    let snakeX = snake[0].x;
-    let snakeY = snake[0].y;
+    let snakeX = snake[0].x; let snakeY = snake[0].y;
+    if (dir === "LEFT") snakeX -= box; if (dir === "UP") snakeY -= box;
+    if (dir === "RIGHT") snakeX += box; if (dir === "DOWN") snakeY += box;
 
-    if (dir === "LEFT") snakeX -= box;
-    if (dir === "UP") snakeY -= box;
-    if (dir === "RIGHT") snakeX += box;
-    if (dir === "DOWN") snakeY += box;
+    if (snakeX < 0) snakeX = canvas.width - box; else if (snakeX >= canvas.width) snakeX = 0;
+    if (snakeY < 0) snakeY = canvas.height - box; else if (snakeY >= canvas.height) snakeY = 0;
 
-    if (snakeX < 0) snakeX = canvas.width - box;
-    else if (snakeX >= canvas.width) snakeX = 0;
-    
-    if (snakeY < 0) snakeY = canvas.height - box;
-    else if (snakeY >= canvas.height) snakeY = 0;
-
-    if (collision(snakeX, snakeY, snake)) {
-        gameOver();
-        return;
-    }
+    if (collision(snakeX, snakeY, snake)) { gameOver(); return; }
 
     let ateFood = false;
     if (snakeX === food.x && snakeY === food.y) {
-        score++;
-        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        playSound('eat'); 
-        placeFood();
-        ateFood = true;
-        if (score % 5 === 0) {
-            increaseSpeed();
-        }
+        score++; document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        playSound('eat'); placeFood(); ateFood = true;
+        if (score % 5 === 0) increaseSpeed();
     }
 
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
-        playSound('powerup'); 
-        if (activePowerUp.type === 'HALF') {
-            const newLen = Math.max(1, Math.floor(snake.length / 2));
-            snake = snake.slice(0, newLen);
-            score = Math.floor(score / 2);
-        } else if (activePowerUp.type === 'DOUBLE') {
-            growthPending += snake.length;
-            score = score * 2;
-        }
+        playSound('powerup');
+        if (activePowerUp.type === 'HALF') { score = Math.floor(score/2); snake = snake.slice(0, Math.max(1, Math.floor(snake.length/2))); }
+        else { score *= 2; growthPending += snake.length; }
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
         activePowerUp = null;
-        if (score % 5 === 0 && score > 0) {
-             increaseSpeed();
-        }
+        if (score % 5 === 0) increaseSpeed();
     }
 
-    if (ateFood) {
-    } else if (growthPending > 0) {
-        growthPending--;
-    } else {
-        snake.pop();
-    }
-
-    let newHead = { x: snakeX, y: snakeY };
-    snake.unshift(newHead);
+    if (!ateFood) { if (growthPending > 0) growthPending--; else snake.pop(); }
+    snake.unshift({ x: snakeX, y: snakeY });
 }
 
 function collision(x, y, array) {
-    for (let i = 0; i < array.length; i++) {
-        if (x === array[i].x && y === array[i].y) return true;
-    }
+    for (let i = 0; i < array.length; i++) { if (x === array[i].x && y === array[i].y) return true; }
     return false;
 }
 
 function gameOver() {
-    isPlaying = false;
-    clearInterval(gameLoop);
-    if(powerUpTimer) clearTimeout(powerUpTimer);
-    stopMusic(); 
-    playSound('gameover'); 
-    showScreen('screen-gameover');
-    animateScore(score);
-    document.getElementById('btnSave').disabled = false;
-    document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
+    isPlaying = false; clearInterval(gameLoop); if(powerUpTimer) clearTimeout(powerUpTimer);
+    stopMusic(); playSound('gameover'); showScreen('screen-gameover'); animateScore(score);
+    document.getElementById('btnSave').disabled = false; document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
 }
 
-document.addEventListener("keydown", function(event) {
-    const key = event.keyCode;
-    if (key == 37 || key == 65) inputQueue.push("LEFT");
-    else if (key == 38 || key == 87) inputQueue.push("UP");
-    else if (key == 39 || key == 68) inputQueue.push("RIGHT");
-    else if (key == 40 || key == 83) inputQueue.push("DOWN");
+document.addEventListener("keydown", function(e) {
+    const k = e.keyCode;
+    if ((k==37||k==65) && dir!=="RIGHT") inputQueue.push("LEFT");
+    else if ((k==38||k==87) && dir!=="DOWN") inputQueue.push("UP");
+    else if ((k==39||k==68) && dir!=="LEFT") inputQueue.push("RIGHT");
+    else if ((k==40||k==83) && dir!=="UP") inputQueue.push("DOWN");
 });
 
-let touchStartX = 0;
-let touchStartY = 0;
-
-document.addEventListener('touchmove', function(e) {
-    e.preventDefault(); 
-}, { passive: false });
-
-document.addEventListener('touchstart', function(event) {
-    touchStartX = event.changedTouches[0].screenX;
-    touchStartY = event.changedTouches[0].screenY;
+let tX=0, tY=0;
+document.addEventListener('touchstart', e => { tX=e.changedTouches[0].screenX; tY=e.changedTouches[0].screenY; }, false);
+document.addEventListener('touchend', e => {
+    let dX = e.changedTouches[0].screenX - tX, dY = e.changedTouches[0].screenY - tY;
+    if (Math.abs(dX) > Math.abs(dY)) { if(dX>0 && dir!=="LEFT") inputQueue.push("RIGHT"); else if(dX<0 && dir!=="RIGHT") inputQueue.push("LEFT"); }
+    else { if(dY>0 && dir!=="UP") inputQueue.push("DOWN"); else if(dY<0 && dir!=="DOWN") inputQueue.push("UP"); }
 }, false);
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
-document.addEventListener('touchend', function(event) {
-    let touchEndX = event.changedTouches[0].screenX;
-    let touchEndY = event.changedTouches[0].screenY;
-    handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
-}, false);
-
-function handleSwipe(startX, startY, endX, endY) {
-    let xDiff = endX - startX;
-    let yDiff = endY - startY;
-
-    if (Math.abs(xDiff) > Math.abs(yDiff)) {
-        if (xDiff > 0) inputQueue.push("RIGHT");
-        else if (xDiff < 0) inputQueue.push("LEFT");
-    } else {
-        if (yDiff > 0) inputQueue.push("DOWN");
-        else if (yDiff < 0) inputQueue.push("UP");
-    }
-}
 </script>
 </body>
 </html>
