@@ -7,20 +7,25 @@
 <meta name="theme-color" content="#0052FF">
 
 <meta property="og:title" content="Base Snake 🐍" />
-<meta property="og:image" content="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" />
+<meta property="og:description" content="Play the ultimate crypto snake game on Base!" />
+<meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
+
 <meta property="fc:frame" content="vNext" />
-<meta property="fc:frame:image" content="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" />
+<meta property="fc:frame:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
+<meta property="fc:frame:button:1" content="Play Base Snake 🐍" />
+<meta property="fc:frame:button:1:action" content="link" />
+<meta property="fc:frame:button:1:target" content="https://mini-app-phi-ashen.vercel.app/" />
 
 <meta property="fc:miniapp" content='{
   "version": "next",
-  "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", 
+  "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
   "button": {
     "title": "Play Base Snake",
     "action": {
       "type": "launch_miniapp",
       "name": "Base Snake",
-      "url": "https://your-vercel-url.vercel.app", 
-      "splashImageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg",
+      "url": "https://mini-app-phi-ashen.vercel.app/", 
+      "splashImageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
       "splashBackgroundColor": "#050510"
     }
   }
@@ -60,6 +65,7 @@
     touch-action: none; 
   }
 
+  /* Developer Credit */
   .dev-credit {
     position: absolute;
     top: 10px;
@@ -142,7 +148,7 @@
   button:active { transform: scale(0.95); }
   button:disabled { background: #555; cursor: not-allowed; }
 
-  /* NEW: Share Button Styling */
+  /* Share Button Styling */
   .btn-share {
     background: var(--warpcast-purple);
     border: 1px solid #fff;
@@ -291,6 +297,7 @@
       <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
       
       <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
+      
       <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
     </div>
 
@@ -324,27 +331,33 @@ Object.keys(audioFiles).forEach(key => {
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
+// FIX: Audio Unlocker - Called on Click interactions
 function unlockAudioAndStart() {
+    // 1. "Touch" all sounds to unlock them on mobile browsers
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
             snd.muted = true;
-            snd.play().catch(e => {});
+            snd.play().catch(e => {}); // Ignore error if already playing
             snd.pause();
             snd.currentTime = 0;
             snd.muted = false; 
         }
     });
 
+    // 2. Explicitly restart BGM
     sounds.bgm.currentTime = 0;
     sounds.bgm.play().catch(e => console.log("BGM Start blocked", e));
 
+    // 3. Start Game Loop
     startGame();
 }
 
+// Helper: Play SFX with overlapping support
 function playSound(name) {
     if (!sounds[name]) return;
     
     if (name !== 'bgm') {
+        // Stop previous instance of SFX to allow rapid replay
         sounds[name].pause();
         sounds[name].currentTime = 0;
         sounds[name].volume = 0.8; 
@@ -357,18 +370,15 @@ function stopMusic() {
     sounds.bgm.currentTime = 0;
 }
 
-// --- SHARING FUNCTIONALITY ---
+// --- SHARING ---
 function shareScore() {
-    const appUrl = "https://mini-app-phi-ashen.vercel.app/"; // Your Game URL
+    const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
     const text = `I just scored ${score} on Base Snake! 🐍\n\nCan you beat me? Play now on @base 👇`;
-    
-    // Construct Warpcast Intent URL
     const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
-    
-    // Open in new tab (or app if installed)
     window.open(intentUrl, '_blank');
 }
 
+// --- WEB3 ---
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
 
 const ABI = [
@@ -396,6 +406,7 @@ let snake, dir, food, score, gameLoop;
 let isPlaying = false;
 let inputQueue = [];
 
+// SPEED CONFIGURATION
 let gameSpeed = 130; 
 
 let activePowerUp = null; 
