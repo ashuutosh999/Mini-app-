@@ -6,6 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0052FF">
 
+<meta property="og:title" content="Base Snake 🐍" />
+<meta property="og:image" content="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" />
+<meta property="fc:frame" content="vNext" />
+<meta property="fc:frame:image" content="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" />
+
 <meta property="fc:miniapp" content='{
   "version": "next",
   "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg", 
@@ -28,6 +33,7 @@
     --base-blue: #0052FF;
     --neon-blue: #00e5ff;
     --neon-pink: #ff00ff;
+    --warpcast-purple: #855DCD;
     --bg-dark: #050510;
   }
 
@@ -54,7 +60,6 @@
     touch-action: none; 
   }
 
-  /* Developer Credit */
   .dev-credit {
     position: absolute;
     top: 10px;
@@ -81,13 +86,13 @@
 
   .screen {
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.95);
     border: 2px solid var(--base-blue);
     padding: 24px;
     border-radius: 16px;
     text-align: center;
-    backdrop-filter: blur(5px);
-    box-shadow: 0 0 20px rgba(0, 82, 255, 0.4);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 25px rgba(0, 82, 255, 0.5);
     width: 85%;
     max-width: 320px;
     display: none;
@@ -131,10 +136,19 @@
     font-family: 'Press Start 2P', cursive;
     width: 100%;
     margin-top: 8px;
+    text-transform: uppercase;
   }
   
   button:active { transform: scale(0.95); }
   button:disabled { background: #555; cursor: not-allowed; }
+
+  /* NEW: Share Button Styling */
+  .btn-share {
+    background: var(--warpcast-purple);
+    border: 1px solid #fff;
+    box-shadow: 0 0 10px var(--warpcast-purple);
+    margin-bottom: 10px;
+  }
 
   .wallet-btn {
     display: flex;
@@ -273,8 +287,10 @@
     <div id="screen-gameover" class="screen">
       <h1 style="color:var(--neon-pink)">GAME OVER</h1>
       <p>Score: <span id="finalScore">0</span></p>
-      <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
       
+      <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
+      
+      <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
       <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
     </div>
 
@@ -290,7 +306,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- ROBUST AUDIO MANAGER ---
+// --- AUDIO MANAGER ---
 const audioFiles = {
     bgm: 'music.mp3',
     eat: 'eat.mp3',
@@ -300,7 +316,7 @@ const audioFiles = {
 
 const sounds = {};
 
-// Preload Audio Objects
+// Preload Audio
 Object.keys(audioFiles).forEach(key => {
     sounds[key] = new Audio(audioFiles[key]);
 });
@@ -308,9 +324,7 @@ Object.keys(audioFiles).forEach(key => {
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
-// FIX: Audio Unlocker & Restarter
 function unlockAudioAndStart() {
-    // 1. "Touch" all sounds to unlock them on mobile
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
             snd.muted = true;
@@ -321,11 +335,9 @@ function unlockAudioAndStart() {
         }
     });
 
-    // 2. Explicitly restart BGM
     sounds.bgm.currentTime = 0;
     sounds.bgm.play().catch(e => console.log("BGM Start blocked", e));
 
-    // 3. Start Game Loop
     startGame();
 }
 
@@ -333,7 +345,6 @@ function playSound(name) {
     if (!sounds[name]) return;
     
     if (name !== 'bgm') {
-        // Stop previous instance of SFX to allow rapid replay
         sounds[name].pause();
         sounds[name].currentTime = 0;
         sounds[name].volume = 0.8; 
@@ -343,7 +354,19 @@ function playSound(name) {
 
 function stopMusic() {
     sounds.bgm.pause();
-    sounds.bgm.currentTime = 0; // Reset to start
+    sounds.bgm.currentTime = 0;
+}
+
+// --- SHARING FUNCTIONALITY ---
+function shareScore() {
+    const appUrl = "https://mini-app-phi-ashen.vercel.app/"; // Your Game URL
+    const text = `I just scored ${score} on Base Snake! 🐍\n\nCan you beat me? Play now on @base 👇`;
+    
+    // Construct Warpcast Intent URL
+    const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
+    
+    // Open in new tab (or app if installed)
+    window.open(intentUrl, '_blank');
 }
 
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
@@ -373,7 +396,6 @@ let snake, dir, food, score, gameLoop;
 let isPlaying = false;
 let inputQueue = [];
 
-// SPEED CONFIGURATION
 let gameSpeed = 130; 
 
 let activePowerUp = null; 
@@ -553,14 +575,13 @@ async function fetchLeaderboard() {
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     
-    // NOTE: Audio is handled in unlockAudioAndStart()
+    // Audio is unlocked in the calling function now
 
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
     inputQueue = []; 
     score = 0;
     
-    // RESET SPEED (130ms)
     gameSpeed = 130; 
     
     activePowerUp = null;
@@ -621,7 +642,6 @@ function placeFood() {
     };
 }
 
-// Function to handle speed increase
 function increaseSpeed() {
     if (gameSpeed > 60) { 
         gameSpeed -= 5; 
