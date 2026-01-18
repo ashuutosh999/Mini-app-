@@ -10,12 +10,6 @@
 <meta property="og:description" content="Play the ultimate crypto snake game on Base!" />
 <meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
 
-<meta property="fc:frame" content="vNext" />
-<meta property="fc:frame:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
-<meta property="fc:frame:button:1" content="Play Base Snakes 🐍" />
-<meta property="fc:frame:button:1:action" content="link" />
-<meta property="fc:frame:button:1:target" content="https://mini-app-phi-ashen.vercel.app/" />
-
 <meta property="fc:miniapp" content='{
   "version": "next",
   "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
@@ -373,7 +367,6 @@ function stopMusic() {
 // --- SHARING ---
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
-    // CHANGED: Updated sharing text
     const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
     const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
     window.open(intentUrl, '_blank');
