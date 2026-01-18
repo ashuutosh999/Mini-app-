@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Base Snake 🟦</title>
+<title>Base Snakes 🟦</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0052FF">
 
-<meta property="og:title" content="Base Snake 🐍" />
+<meta property="og:title" content="Base Snakes 🐍" />
 <meta property="og:description" content="Play the ultimate crypto snake game on Base!" />
 <meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
 
 <meta property="fc:frame" content="vNext" />
 <meta property="fc:frame:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
-<meta property="fc:frame:button:1" content="Play Base Snake 🐍" />
+<meta property="fc:frame:button:1" content="Play Base Snakes 🐍" />
 <meta property="fc:frame:button:1:action" content="link" />
 <meta property="fc:frame:button:1:target" content="https://mini-app-phi-ashen.vercel.app/" />
 
@@ -20,10 +20,10 @@
   "version": "next",
   "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
   "button": {
-    "title": "Play Base Snake",
+    "title": "Play Base Snakes",
     "action": {
       "type": "launch_miniapp",
-      "name": "Base Snake",
+      "name": "Base Snakes",
       "url": "https://mini-app-phi-ashen.vercel.app/", 
       "splashImageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
       "splashBackgroundColor": "#050510"
@@ -252,7 +252,7 @@
   <div id="ui-layer">
     
     <div id="screen-connect" class="screen active">
-      <h1>BASE SNAKE</h1>
+      <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
       <button onclick="showScreen('screen-wallet-select')">🔗 CONNECT WALLET</button>
     </div>
@@ -373,7 +373,8 @@ function stopMusic() {
 // --- SHARING ---
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
-    const text = `I just scored ${score} on Base Snake! 🐍\n\nCan you beat me? Play now on @base 👇`;
+    // CHANGED: Updated sharing text
+    const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
     const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
     window.open(intentUrl, '_blank');
 }
