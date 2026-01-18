@@ -253,6 +253,11 @@
 
     <div id="screen-wallet-select" class="screen">
       <h1>CHOOSE WALLET</h1>
+
+      <button class="wallet-btn" onclick="connectSpecificWallet('farcaster')">
+        <img src="https://warpcast.com/og-logo.png" class="wallet-icon" style="border-radius:50%;" alt="Farcaster">
+        Farcaster Wallet
+      </button>
       
       <button class="wallet-btn" onclick="connectSpecificWallet('metamask')">
         <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
@@ -299,11 +304,7 @@
 
 <script type="module">
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-  
   console.log("Farcaster SDK loaded via Module");
-  
-  // Call ready() immediately to prevent infinite loading screen
-  // Documentation says: "After your app loads, you must call sdk.actions.ready()"
   sdk.actions.ready();
 </script>
 
@@ -328,33 +329,26 @@ Object.keys(audioFiles).forEach(key => {
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
-// FIX: Audio Unlocker - Called on Click interactions
+// FIX: Audio Unlocker
 function unlockAudioAndStart() {
-    // 1. "Touch" all sounds to unlock them on mobile browsers
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
             snd.muted = true;
-            snd.play().catch(e => {}); // Ignore error if already playing
+            snd.play().catch(e => {}); 
             snd.pause();
             snd.currentTime = 0;
             snd.muted = false; 
         }
     });
-
-    // 2. Explicitly restart BGM
     sounds.bgm.currentTime = 0;
     sounds.bgm.play().catch(e => console.log("BGM Start blocked", e));
-
-    // 3. Start Game Loop
     startGame();
 }
 
-// Helper: Play SFX with overlapping support
+// Helper: Play SFX
 function playSound(name) {
     if (!sounds[name]) return;
-    
     if (name !== 'bgm') {
-        // Stop previous instance of SFX to allow rapid replay
         sounds[name].pause();
         sounds[name].currentTime = 0;
         sounds[name].volume = 0.8; 
@@ -402,14 +396,10 @@ window.addEventListener('resize', setCanvasSize);
 let snake, dir, food, score, gameLoop;
 let isPlaying = false;
 let inputQueue = [];
-
-// SPEED CONFIGURATION
 let gameSpeed = 130; 
-
 let activePowerUp = null; 
 let growthPending = 0;    
 let powerUpTimer = null;  
-
 let provider, signer, contract;
 let userAddress, currentUsername;
 
@@ -437,9 +427,14 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
+// ✅ UPDATED: Wallet Selection Logic
 function getProvider(type) {
     const eth = window.ethereum;
     if (!eth) return null;
+
+    // Farcaster Wallet: Just return the default injected provider
+    if (type === 'farcaster') return eth;
+
     if (eth.providers && Array.isArray(eth.providers)) {
         if (type === 'coinbase') return eth.providers.find(p => p.isCoinbaseWallet);
         if (type === 'metamask') return eth.providers.find(p => p.isMetaMask);
@@ -447,20 +442,25 @@ function getProvider(type) {
     if (type === 'coinbase' && eth.isCoinbaseWallet) return eth;
     if (type === 'metamask' && eth.isMetaMask) return eth;
     if (type === 'metamask' && !eth.isCoinbaseWallet) return eth;
+    
     return null;
 }
 
 async function connectSpecificWallet(walletType) {
-    if (!window.ethereum) return alert("No wallet found. Please install MetaMask or Coinbase Wallet.");
+    if (!window.ethereum) return alert("No wallet found. Please install a wallet.");
 
     const specificProvider = getProvider(walletType);
-    if (!specificProvider) {
-        alert(`${walletType === 'coinbase' ? 'Coinbase Wallet' : 'MetaMask'} not found.`);
+    
+    // Fallback: If 'farcaster' was chosen but we couldn't differentiate, just use window.ethereum
+    const finalProvider = specificProvider || window.ethereum;
+
+    if (!finalProvider) {
+        alert(`Wallet not found.`);
         return;
     }
 
     try {
-        provider = new ethers.providers.Web3Provider(specificProvider);
+        provider = new ethers.providers.Web3Provider(finalProvider);
         await provider.send("eth_requestAccounts", []);
         
         const network = await provider.getNetwork();
@@ -589,9 +589,7 @@ function startGame() {
     dir = "RIGHT";
     inputQueue = []; 
     score = 0;
-    
     gameSpeed = 130; 
-    
     activePowerUp = null;
     growthPending = 0;
 
@@ -728,12 +726,9 @@ function draw() {
     if (snakeX === food.x && snakeY === food.y) {
         score++;
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        
         playSound('eat'); 
-        
         placeFood();
         ateFood = true;
-
         if (score % 5 === 0) {
             increaseSpeed();
         }
@@ -741,7 +736,6 @@ function draw() {
 
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
         playSound('powerup'); 
-        
         if (activePowerUp.type === 'HALF') {
             const newLen = Math.max(1, Math.floor(snake.length / 2));
             snake = snake.slice(0, newLen);
@@ -752,7 +746,6 @@ function draw() {
         }
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
         activePowerUp = null;
-        
         if (score % 5 === 0 && score > 0) {
              increaseSpeed();
         }
@@ -780,10 +773,8 @@ function gameOver() {
     isPlaying = false;
     clearInterval(gameLoop);
     if(powerUpTimer) clearTimeout(powerUpTimer);
-    
     stopMusic(); 
     playSound('gameover'); 
-    
     showScreen('screen-gameover');
     animateScore(score);
     document.getElementById('btnSave').disabled = false;
