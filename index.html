@@ -25,6 +25,8 @@
   }
 }' />
 
+<script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@latest/dist/index.min.js"></script>
+
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
 
@@ -297,20 +299,25 @@
 
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@latest/dist/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-// ✅ FIXED: Safe Initialization Logic (Prevents "Stuck on Logo")
+// ✅ CHANGE 2: Aggressive Polling for iOS
+// This ensures we catch the exact millisecond the SDK loads
 const initializeFarcaster = () => {
-    // Keep trying every 300ms until the SDK is found
+    // Check if the SDK is loaded
     if (window.farcaster && window.farcaster.sdk) {
+        console.log("Farcaster SDK found. Ready!");
         window.farcaster.sdk.actions.ready();
     } else {
-        setTimeout(initializeFarcaster, 300);
+        // If not found, try again in 50ms (Very fast check)
+        setTimeout(initializeFarcaster, 50);
     }
 };
+
+// Start checking immediately
 initializeFarcaster();
+
 
 // --- AUDIO MANAGER ---
 const audioFiles = {
