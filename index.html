@@ -251,24 +251,6 @@
       <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
     </div>
 
-    <div id="screen-wallet-select" class="screen">
-      <h1>CHOOSE WALLET</h1>
-      
-      <button class="wallet-btn" onclick="connectSpecificWallet('metamask')">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
-        MetaMask
-      </button>
-
-      <button class="wallet-btn" onclick="connectSpecificWallet('coinbase')">
-        <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
-        Coinbase Wallet
-      </button>
-
-      <div style="margin-top:15px; font-size:12px; color:#666; cursor:pointer;" onclick="showScreen('screen-connect')">
-        ← Go Back
-      </div>
-    </div>
-
     <div id="screen-register" class="screen">
       <h1>NEW PLAYER</h1>
       <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter a username to link to your wallet.</p>
@@ -300,10 +282,12 @@
 <script type="module">
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
   
-  // 1. Ready signal for Farcaster
+  // ✅ IMPORTANT: Expose SDK to global window so standard scripts can use it
+  window.sdk = sdk;
+  
   sdk.actions.ready();
 
-  // 2. Trigger Auto-Connect logic with a small delay for mobile injection
+  // Trigger Auto-Connect logic with a small delay
   setTimeout(() => {
     if (window.autoConnect) {
         window.autoConnect(); 
@@ -314,65 +298,87 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-// ✅ FIXED: Robust Wallet Polling
-// This will keep looking for the wallet for 3 seconds on mobile
-window.autoConnect = function() {
+// ✅ FIXED: Hybrid AutoConnect (Mini App + Web Fallback)
+window.autoConnect = async function() {
     const btn = document.getElementById("mainConnectBtn");
-    if(btn) btn.innerText = "DETECTING...";
+    if(btn) btn.innerText = "CONNECTING...";
 
-    let attempts = 0;
-    const maxAttempts = 30; // 3 seconds total
-
-    // Create a loop that checks every 100ms
-    const checkInterval = setInterval(async () => {
-        attempts++;
-        
-        // Check if Ethereum provider is injected
-        if (window.ethereum) {
-            clearInterval(checkInterval); // Found it! Stop checking.
+    try {
+        // ---------------------------------------------------------
+        // 1️⃣ FARCASTER MINI APP PATH (Mobile/iOS)
+        // ---------------------------------------------------------
+        if (window.sdk && window.sdk.context && window.sdk.context.isMiniApp) {
+            console.log("Detecting Farcaster Mini App Environment...");
             
-            if(btn) btn.innerText = "CONNECTING...";
-            
-            try {
-                // Initialize Ethers with the found provider
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                
-                // Check Network
-                const network = await provider.getNetwork();
-                if (network.chainId !== 8453 && network.chainId !== 84532) {
-                     alert("Please switch to Base Network!");
-                }
+            // Use the SDK's provider, NOT window.ethereum
+            provider = new ethers.providers.Web3Provider(window.sdk.wallet.ethereum, "any");
 
-                // Setup Contracts
-                signer = provider.getSigner();
-                userAddress = await signer.getAddress();
-                contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+            await provider.send("eth_requestAccounts", []);
 
-                // Update UI
-                document.getElementById("walletDisplay").innerHTML = 
-                    `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+            signer = provider.getSigner();
+            userAddress = await signer.getAddress();
+            contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
-                // Proceed to Game
-                checkRegistration();
-                fetchLeaderboard();
-
-            } catch (err) {
-                console.error("Connection failed:", err);
-                if(btn) btn.innerText = "RETRY CONNECT";
-            }
-
-        } else if (attempts >= maxAttempts) {
-            // Timed out (Wallet not found after 3 seconds)
-            clearInterval(checkInterval);
-            console.log("No wallet detected.");
-            if(btn) btn.innerText = "🔗 CONNECT WALLET"; 
-            
-            // Optional: If auto-fail, show the manual select screen as fallback
-            // showScreen('screen-wallet-select');
+            updateUIConnected(userAddress);
+            return; // ✅ Stop here, we are connected via SDK
         }
-    }, 100); // Check every 100ms
+
+        // ---------------------------------------------------------
+        // 2️⃣ STANDARD WEB PATH (MetaMask / Coinbase / Desktop)
+        // ---------------------------------------------------------
+        
+        // We poll for window.ethereum injection (standard web behavior)
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds
+        
+        if(btn) btn.innerText = "DETECTING WALLET...";
+
+        const checkInterval = setInterval(async () => {
+            attempts++;
+            
+            if (window.ethereum) {
+                clearInterval(checkInterval);
+                
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    
+                    // ✅ FIXED: Network Check (No Alert Spam)
+                    const network = await provider.getNetwork();
+                    if (![8453, 84532].includes(network.chainId)) {
+                       throw new Error("Wrong Network: Please switch to Base.");
+                    }
+
+                    signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
+                    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+                    updateUIConnected(userAddress);
+                } catch (err) {
+                    console.error("Web3 Connection failed:", err);
+                    if(btn) btn.innerText = "RETRY / SWITCH NETWORK";
+                }
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                console.log("No wallet detected.");
+                if(btn) btn.innerText = "INSTALL WALLET"; 
+            }
+        }, 100);
+
+    } catch (err) {
+        console.error("General Connection Error:", err);
+        if(btn) btn.innerText = "CONN FAILED";
+    }
 };
+
+function updateUIConnected(address) {
+    document.getElementById("walletDisplay").innerText = 
+        `🟢 ${address.slice(0,4)}...${address.slice(-4)}`;
+    
+    // Proceed to Game
+    checkRegistration();
+    fetchLeaderboard();
+}
 
 
 // --- AUDIO MANAGER ---
@@ -393,7 +399,6 @@ Object.keys(audioFiles).forEach(key => {
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
-// FIX: Audio Unlocker - Called on Click interactions
 function unlockAudioAndStart() {
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
@@ -409,7 +414,6 @@ function unlockAudioAndStart() {
     startGame();
 }
 
-// Helper: Play SFX with overlapping support
 function playSound(name) {
     if (!sounds[name]) return;
     if (name !== 'bgm') {
@@ -433,7 +437,7 @@ function shareScore() {
     window.open(intentUrl, '_blank');
 }
 
-// --- WEB3 ---
+// --- WEB3 CONFIG ---
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
 
 const ABI = [
@@ -491,11 +495,7 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
-// Classic Manual Connection (Fallback)
-async function connectSpecificWallet(walletType) {
-    // If user clicks a specific wallet manually, use the same logic
-    window.autoConnect();
-}
+// 🗑️ REMOVED: connectSpecificWallet (Not needed)
 
 async function checkRegistration() {
     try {
