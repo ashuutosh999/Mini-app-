@@ -248,8 +248,7 @@
     <div id="screen-connect" class="screen active">
       <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      
-      <button onclick="autoConnect()">🔗 CONNECT WALLET</button>
+      <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
     </div>
 
     <div id="screen-wallet-select" class="screen">
@@ -299,64 +298,82 @@
   </div>
 
 <script type="module">
-  // This imports the SDK and runs ready() to kill the splash screen
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
   
-  console.log("Farcaster SDK loaded via Module");
-  
-  // 1. Tell Farcaster we are ready (Hides Splash Screen)
+  // 1. Ready signal for Farcaster
   sdk.actions.ready();
 
-  // 2. Trigger Auto-Connect from inside the module
-  // We use a small timeout to let the window.ethereum injection finish
+  // 2. Trigger Auto-Connect logic with a small delay for mobile injection
   setTimeout(() => {
     if (window.autoConnect) {
-      window.autoConnect(); 
+        window.autoConnect(); 
     }
-  }, 500);
+  }, 300);
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-// ✅ NEW: Auto-Connect Function
-// This tries to connect immediately without asking the user
-window.autoConnect = async function() {
-    if (!window.ethereum) {
-        console.log("No wallet found yet.");
-        // If no wallet found, we can show the manual select screen
-        // showScreen('screen-wallet-select'); 
-        return;
-    }
+// ✅ FIXED: Robust Wallet Polling
+// This will keep looking for the wallet for 3 seconds on mobile
+window.autoConnect = function() {
+    const btn = document.getElementById("mainConnectBtn");
+    if(btn) btn.innerText = "DETECTING...";
 
-    try {
-        // Attempt to connect silently
-        provider = new ethers.providers.Web3Provider(window.ethereum);
+    let attempts = 0;
+    const maxAttempts = 30; // 3 seconds total
+
+    // Create a loop that checks every 100ms
+    const checkInterval = setInterval(async () => {
+        attempts++;
         
-        // This line triggers the "Connect" popup if not already connected
-        await provider.send("eth_requestAccounts", []);
-        
-        const network = await provider.getNetwork();
-        if (network.chainId !== 8453 && network.chainId !== 84532) {
-             alert("Please switch to Base Network!");
+        // Check if Ethereum provider is injected
+        if (window.ethereum) {
+            clearInterval(checkInterval); // Found it! Stop checking.
+            
+            if(btn) btn.innerText = "CONNECTING...";
+            
+            try {
+                // Initialize Ethers with the found provider
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                
+                // Check Network
+                const network = await provider.getNetwork();
+                if (network.chainId !== 8453 && network.chainId !== 84532) {
+                     alert("Please switch to Base Network!");
+                }
+
+                // Setup Contracts
+                signer = provider.getSigner();
+                userAddress = await signer.getAddress();
+                contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+                // Update UI
+                document.getElementById("walletDisplay").innerHTML = 
+                    `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+
+                // Proceed to Game
+                checkRegistration();
+                fetchLeaderboard();
+
+            } catch (err) {
+                console.error("Connection failed:", err);
+                if(btn) btn.innerText = "RETRY CONNECT";
+            }
+
+        } else if (attempts >= maxAttempts) {
+            // Timed out (Wallet not found after 3 seconds)
+            clearInterval(checkInterval);
+            console.log("No wallet detected.");
+            if(btn) btn.innerText = "🔗 CONNECT WALLET"; 
+            
+            // Optional: If auto-fail, show the manual select screen as fallback
+            // showScreen('screen-wallet-select');
         }
-
-        signer = provider.getSigner();
-        userAddress = await signer.getAddress();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-        document.getElementById("walletDisplay").innerHTML = 
-            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-
-        // If successful, go straight to registration or game
-        checkRegistration();
-        fetchLeaderboard(); 
-
-    } catch (err) {
-        console.error("Auto-connect failed or rejected:", err);
-        // If user rejects, stay on the "Connect Wallet" screen
-    }
+    }, 100); // Check every 100ms
 };
+
 
 // --- AUDIO MANAGER ---
 const audioFiles = {
@@ -392,7 +409,7 @@ function unlockAudioAndStart() {
     startGame();
 }
 
-// Helper: Play SFX
+// Helper: Play SFX with overlapping support
 function playSound(name) {
     if (!sounds[name]) return;
     if (name !== 'bgm') {
@@ -474,14 +491,9 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
-// Classic Manual Connection (For Desktop testing)
+// Classic Manual Connection (Fallback)
 async function connectSpecificWallet(walletType) {
-    // ... (This function remains as a fallback for desktop users)
-    // You can keep the previous implementation here if desired, 
-    // but the autoConnect() above handles the primary Farcaster case.
-    if (!window.ethereum) return alert("No wallet found.");
-    
-    // Simple fallback to whatever provider is there
+    // If user clicks a specific wallet manually, use the same logic
     window.autoConnect();
 }
 
