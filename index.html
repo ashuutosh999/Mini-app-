@@ -234,7 +234,7 @@
       <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
       
-      <button id="mainConnectBtn" onclick="window.handleConnect()">🔗 CONNECT WALLET</button>
+      <button id="mainConnectBtn">🔗 CONNECT WALLET</button>
     </div>
 
     <div id="screen-register" class="screen">
@@ -242,101 +242,30 @@
       <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter a username to link to your wallet.</p>
       <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
       <br>
-      <button onclick="registerUser()">REGISTER</button>
+      <button id="registerBtn">REGISTER</button>
     </div>
 
     <div id="screen-start" class="screen">
       <h1 id="welcomeMsg">WELCOME</h1>
       <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
-      <button onclick="unlockAudioAndStart()">▶ START GAME</button>
+      <button onclick="window.unlockAudioAndStart()">▶ START GAME</button>
     </div>
 
     <div id="screen-gameover" class="screen">
       <h1 style="color:var(--neon-pink)">GAME OVER</h1>
       <p>Score: <span id="finalScore">0</span></p>
-      <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
-      <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
-      <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
+      <button class="btn-share" onclick="window.shareScore()">📤 SHARE ON FARCASTER</button>
+      <button id="btnSave" onclick="window.submitScore()">💾 SAVE ON-CHAIN</button>
+      <button onclick="window.unlockAudioAndStart()">🔄 RESTART</button>
     </div>
   </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.11.1/ethers.umd.min.js"></script>
-
 <script type="module">
-  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+import { ethers } from 'https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.min.js';
 
-  // 1. Ready signal
-  sdk.actions.ready();
-
-  // 2. Define Global Connection Function using RAW SDK Provider (Best for Mobile)
-  window.handleConnect = async () => {
-    const btn = document.getElementById("mainConnectBtn");
-    btn.innerText = "CONNECTING...";
-
-    try {
-        // Use the SDK provider directly first (Raw EIP-1193 Request)
-        // This is safer than wrapping in Ethers immediately
-        const accounts = await sdk.provider.request({ method: "eth_requestAccounts" });
-        
-        if (!accounts || accounts.length === 0) {
-            throw new Error("No accounts returned.");
-        }
-
-        const userAddress = accounts[0];
-        console.log("Connected:", userAddress);
-
-        // Now that we have access, we initialize Ethers for contract calls
-        const provider = new ethers.BrowserProvider(sdk.provider);
-        const signer = await provider.getSigner();
-
-        // Update Global State
-        window.web3State = { provider, signer, userAddress };
-
-        // Update UI
-        document.getElementById("walletDisplay").innerHTML = 
-            `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-        
-        // Init Game Contract
-        initGameContract(signer);
-        
-        // Move to next screen
-        checkRegistration(userAddress);
-
-    } catch (err) {
-        console.error("Connect Failed", err);
-        // Fallback for Desktop testing if SDK provider is empty
-        if (window.ethereum) {
-             console.log("Falling back to window.ethereum...");
-             await connectFallback();
-        } else {
-             alert(err.message || "Connection failed. Please try again.");
-             btn.innerText = "RETRY CONNECT";
-        }
-    }
-  };
-
-  // Helper for desktop fallback
-  async function connectFallback() {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      
-      window.web3State = { provider, signer, userAddress };
-      document.getElementById("walletDisplay").innerHTML = `🟢 ${userAddress.slice(0,4)}...`;
-      initGameContract(signer);
-      checkRegistration(userAddress);
-  }
-
-  // 3. Auto-Trigger on Load (Matches "working app" behavior)
-  setTimeout(() => {
-      window.handleConnect();
-  }, 600);
-</script>
-
-<script>
-// --- GAME LOGIC (Ethers v6 Updated) ---
-const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
+// --- CONFIGURATION ---
+const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd";
 const ABI = [
   "function registerUser(string username) public",
   "function saveScore(uint256 score) public",
@@ -345,23 +274,73 @@ const ABI = [
   "event UserRegistered(address indexed player, string username)"
 ];
 
-let contract; 
+// --- STATE ---
+let contract;
+let provider;
+let signer;
+let userAddress;
 
-function initGameContract(signer) {
-    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-}
+// --- INITIALIZATION ---
+// 1. Tell Farcaster we are ready immediately
+console.log("Initializing SDK...");
+sdk.actions.ready();
 
-function showScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+// 2. Attach Connect Logic
+document.getElementById('mainConnectBtn').addEventListener('click', handleConnect);
+document.getElementById('registerBtn').addEventListener('click', registerUser);
+
+async function handleConnect() {
+    const btn = document.getElementById("mainConnectBtn");
+    btn.innerText = "CONNECTING...";
+
+    try {
+        let ethProvider = null;
+
+        // PRIORITY 1: Check Farcaster SDK Provider (For Mobile/Warpcast)
+        // This is the specific fix for mobile "Not Connected" errors
+        if (sdk.provider) {
+            console.log("Using Farcaster SDK Provider");
+            ethProvider = new ethers.BrowserProvider(sdk.provider);
+        } 
+        // PRIORITY 2: Check Standard Window Injection (For Desktop/Metamask)
+        else if (window.ethereum) {
+            console.log("Using Window.Ethereum");
+            ethProvider = new ethers.BrowserProvider(window.ethereum);
+        } else {
+            throw new Error("No wallet found. Please open in Warpcast or a Web3 browser.");
+        }
+
+        // Request Accounts (Triggers the popup)
+        const accounts = await ethProvider.send("eth_requestAccounts", []);
+        
+        if (!accounts || accounts.length === 0) throw new Error("No accounts authorized.");
+        
+        // Setup Ethers
+        provider = ethProvider;
+        signer = await provider.getSigner();
+        userAddress = await signer.getAddress();
+        
+        // Setup Contract
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        // UI Updates
+        document.getElementById("walletDisplay").innerHTML = `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+        
+        // Check Flow
+        await checkRegistration(userAddress);
+
+    } catch (err) {
+        console.error("Connection Error:", err);
+        alert("Connect Failed: " + (err.message || "Unknown error"));
+        btn.innerText = "RETRY CONNECT";
+    }
 }
 
 async function checkRegistration(addr) {
     try {
-        if(!contract) return;
         const player = await contract.getPlayer(addr);
-        // Ethers v6 Result Check
-        if (!player || player[0] === "") {
+        // Ethers v6 often returns Result objects, check if name string is present
+        if (!player || !player[0]) {
             showScreen('screen-register');
         } else {
             document.getElementById("welcomeMsg").innerText = `HI, ${player[0].toUpperCase()}`;
@@ -370,71 +349,288 @@ async function checkRegistration(addr) {
         }
         fetchLeaderboard();
     } catch (e) {
-        console.log("Check Reg Error", e);
-        showScreen('screen-register'); 
+        console.log("New user or network error:", e);
+        showScreen('screen-register'); // Assume new user if check fails
     }
 }
 
 async function registerUser() {
-    const name = document.getElementById("usernameInput").value;
-    if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
-    if (!contract) return alert("Wallet not connected properly.");
+    const nameInput = document.getElementById("usernameInput");
+    const btn = document.getElementById('registerBtn');
+    const name = nameInput.value;
 
+    if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
+    
+    btn.innerText = "REGISTERING...";
+    
     try {
         const tx = await contract.registerUser(name);
-        document.querySelector('#screen-register button').innerText = "REGISTERING...";
-        await tx.wait();
+        await tx.wait(); // Wait for confirmation
+        
+        currentUsername = name;
         showScreen('screen-start');
     } catch (err) {
-        alert("Tx Failed: " + err.message);
-        document.querySelector('#screen-register button').innerText = "REGISTER";
+        console.error(err);
+        alert("Registration Failed. Check console.");
+        btn.innerText = "REGISTER";
     }
 }
 
-async function submitScore() {
-    if (!contract) return;
+// Expose Game Functions to Global Scope (so HTML buttons work)
+window.submitScore = async function() {
+    if (!contract) return alert("Wallet disconnected");
+    const btn = document.getElementById('btnSave');
+    
     try {
-        const btn = document.getElementById('btnSave');
         btn.innerText = "SIGNING...";
         btn.disabled = true;
-        const tx = await contract.saveScore(score);
+        
+        const tx = await contract.saveScore(score); // 'score' from game logic below
         btn.innerText = "MINING...";
         await tx.wait();
+        
         btn.innerText = "SAVED! ✅";
-        fetchLeaderboard(); 
+        fetchLeaderboard();
     } catch (err) {
-        alert("Error: " + err.message);
-        document.getElementById('btnSave').disabled = false;
-        document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
+        alert("Save Failed: " + err.message);
+        btn.disabled = false;
+        btn.innerText = "💾 SAVE ON-CHAIN";
+    }
+};
+
+async function fetchLeaderboard() {
+    if (!contract) return;
+    try {
+        const filter = contract.filters.NewScore();
+        const events = await contract.queryFilter(filter, -2000);
+        
+        // Process events (Ethers v6 syntax)
+        let scores = events.map(e => ({
+            name: e.args[1],
+            score: Number(e.args[2])
+        }));
+
+        scores.sort((a,b) => b.score - a.score);
+        const top5 = scores.slice(0, 5);
+
+        const list = document.getElementById("leaderboardList");
+        if(top5.length === 0) {
+            list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores yet!</div>";
+        } else {
+            list.innerHTML = top5.map((s, i) => `
+                <div class="lb-row">
+                    <span class="lb-rank">#${i+1}</span>
+                    <span class="lb-name">${s.name}</span>
+                    <span class="lb-score">${s.score}</span>
+                </div>
+            `).join('');
+        }
+    } catch(e) {
+        console.log("Leaderboard error:", e);
     }
 }
 
-async function fetchLeaderboard() {
-    if (!contract) {
-        document.getElementById("leaderboardList").innerText = "Connect wallet to view";
-        return;
+// --- HELPER FUNCTIONS ---
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+// --- GAME ENGINE (Snake Logic) ---
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const box = 20; 
+let snake, dir, food, score, gameLoop;
+let isPlaying = false;
+let inputQueue = [];
+let activePowerUp = null; 
+let growthPending = 0;    
+let powerUpTimer = null; 
+let gameSpeed = 130;
+
+const setCanvasSize = () => {
+    let size = Math.min(window.innerWidth - 20, 400);
+    size = Math.floor(size / box) * box; 
+    canvas.width = size; canvas.height = size;
+};
+setCanvasSize();
+window.addEventListener('resize', setCanvasSize);
+
+// Audio
+const audioFiles = { bgm: 'music.mp3', eat: 'eat.mp3', powerup: 'powerup.mp3', gameover: 'gameover.mp3' };
+const sounds = {};
+Object.keys(audioFiles).forEach(key => { sounds[key] = new Audio(audioFiles[key]); });
+sounds.bgm.loop = true; sounds.bgm.volume = 0.4;
+
+window.unlockAudioAndStart = function() {
+    Object.values(sounds).forEach(snd => {
+        if(snd.paused) { snd.muted=true; snd.play().catch(()=>{}); snd.pause(); snd.currentTime=0; snd.muted=false; }
+    });
+    sounds.bgm.currentTime = 0;
+    sounds.bgm.play().catch(e => {});
+    startGame();
+};
+
+function playSound(name) {
+    if (!sounds[name]) return;
+    if (name !== 'bgm') {
+        sounds[name].pause(); sounds[name].currentTime = 0;
+        sounds[name].volume = 0.8; sounds[name].play().catch(()=>{});
     }
-    try {
-        const filter = contract.filters.NewScore();
-        const events = await contract.queryFilter(filter, -2000); 
-        
-        let scores = events.map(e => ({
-            name: e.args[1], 
-            score: Number(e.args[2])
-        }));
-        
-        const bestScores = {};
-        scores.forEach(s => {
-            if (!bestScores[s.name] || s.score > bestScores[s.name]) {
-                bestScores[s.name] = s.score;
-            }
-        });
-        
-        const sorted = Object.entries(bestScores)
-            .map(([name, score]) => ({ name, score }))
-            .sort((a,b) => b.score - a.score)
-            .slice(0, 5);
-        
-        const list = document.getElementById("leaderboardList");
-        if(sorted.length === 0) {
-            list.innerHTML = "<div style='text
+}
+
+window.shareScore = function() {
+    const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
+    const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
+    const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
+    window.open(intentUrl, '_blank');
+};
+
+function startGame() {
+    showScreen('hud'); // Just hides screens overlay
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    
+    snake = [{ x: 10 * box, y: 10 * box }];
+    dir = "RIGHT"; inputQueue = []; score = 0;
+    gameSpeed = 130; activePowerUp = null; growthPending = 0;
+    
+    document.getElementById("scoreDisplay").innerText = "SCORE: 0";
+    placeFood(); scheduleNextPowerUp(); 
+    isPlaying = true;
+    
+    if (gameLoop) clearInterval(gameLoop);
+    gameLoop = setInterval(draw, gameSpeed);
+}
+
+function scheduleNextPowerUp() {
+    if (powerUpTimer) clearTimeout(powerUpTimer);
+    powerUpTimer = setTimeout(() => { if (isPlaying) spawnPowerUp(); }, Math.random() * 10000 + 5000);
+}
+
+function spawnPowerUp() {
+    const cols = Math.floor(canvas.width / box);
+    const rows = Math.floor(canvas.height / box);
+    let newItem = { x: Math.floor(Math.random()*cols)*box, y: Math.floor(Math.random()*rows)*box, type: Math.random()>0.5?'HALF':'DOUBLE', expireTime: Date.now()+5000 };
+    if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) return;
+    activePowerUp = newItem;
+    setTimeout(() => { if (activePowerUp === newItem) activePowerUp = null; }, 5000);
+    scheduleNextPowerUp();
+}
+
+function placeFood() {
+    const cols = Math.floor(canvas.width / box);
+    const rows = Math.floor(canvas.height / box);
+    food = { x: Math.floor(Math.random()*cols)*box, y: Math.floor(Math.random()*rows)*box };
+}
+
+function increaseSpeed() {
+    if (gameSpeed > 60) { gameSpeed -= 5; clearInterval(gameLoop); gameLoop = setInterval(draw, gameSpeed); }
+}
+
+function draw() {
+    if (inputQueue.length > 0) {
+        let next = inputQueue.shift();
+        if (next === "LEFT" && dir !== "RIGHT") dir = "LEFT";
+        else if (next === "UP" && dir !== "DOWN") dir = "UP";
+        else if (next === "RIGHT" && dir !== "LEFT") dir = "RIGHT";
+        else if (next === "DOWN" && dir !== "UP") dir = "DOWN";
+    }
+    
+    // BG
+    ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Food
+    ctx.shadowBlur = 15; ctx.shadowColor = "#ff00ff"; ctx.fillStyle = "#ff00ff"; 
+    ctx.fillRect(food.x, food.y, box-2, box-2); ctx.shadowBlur = 0;
+
+    // PowerUp
+    if (activePowerUp) {
+        if (Date.now() > activePowerUp.expireTime) activePowerUp = null;
+        else {
+            ctx.shadowBlur = 20; ctx.shadowColor = activePowerUp.type==='DOUBLE'?"#00ff00":"#ff0000"; ctx.fillStyle = ctx.shadowColor;
+            ctx.beginPath(); ctx.arc(activePowerUp.x+box/2, activePowerUp.y+box/2, box/2, 0, 2*Math.PI); ctx.fill(); ctx.shadowBlur = 0;
+            ctx.fillStyle = "white"; ctx.font = "10px Arial"; ctx.textAlign = "center"; 
+            ctx.fillText(activePowerUp.type==='DOUBLE'?"2x":"½", activePowerUp.x+box/2, activePowerUp.y+box-4);
+        }
+    }
+
+    // Snake
+    for (let i = 0; i < snake.length; i++) {
+        ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
+        ctx.shadowBlur = (i===0)?10:0; ctx.shadowColor = "#ffffff";
+        ctx.fillRect(snake[i].x, snake[i].y, box-2, box-2); ctx.shadowBlur = 0;
+    }
+
+    // Move
+    let snakeX = snake[0].x; let snakeY = snake[0].y;
+    if (dir === "LEFT") snakeX -= box; if (dir === "UP") snakeY -= box;
+    if (dir === "RIGHT") snakeX += box; if (dir === "DOWN") snakeY += box;
+
+    // Walls
+    if (snakeX < 0) snakeX = canvas.width - box; else if (snakeX >= canvas.width) snakeX = 0;
+    if (snakeY < 0) snakeY = canvas.height - box; else if (snakeY >= canvas.height) snakeY = 0;
+
+    if (collision(snakeX, snakeY, snake)) { gameOver(); return; }
+
+    // Eat
+    let ateFood = false;
+    if (snakeX === food.x && snakeY === food.y) {
+        score++; document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        playSound('eat'); placeFood(); ateFood = true;
+        if (score % 5 === 0) increaseSpeed();
+    }
+
+    // Powerup Hit
+    if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
+        playSound('powerup');
+        if (activePowerUp.type === 'HALF') { score = Math.floor(score/2); snake = snake.slice(0, Math.max(1, Math.floor(snake.length/2))); }
+        else { score *= 2; growthPending += snake.length; }
+        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        activePowerUp = null;
+        if (score % 5 === 0) increaseSpeed();
+    }
+
+    if (!ateFood) { if (growthPending > 0) growthPending--; else snake.pop(); }
+    snake.unshift({ x: snakeX, y: snakeY });
+}
+
+function collision(x, y, array) {
+    for (let i = 0; i < array.length; i++) { if (x === array[i].x && y === array[i].y) return true; }
+    return false;
+}
+
+function gameOver() {
+    isPlaying = false; clearInterval(gameLoop); if(powerUpTimer) clearTimeout(powerUpTimer);
+    stopMusic(); playSound('gameover'); showScreen('screen-gameover'); 
+    
+    // Animate Score
+    const scoreElement = document.getElementById("finalScore");
+    scoreElement.innerText = score;
+    
+    document.getElementById('btnSave').disabled = false; 
+    document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
+}
+
+// Controls
+document.addEventListener("keydown", function(e) {
+    const k = e.keyCode;
+    if ((k==37||k==65) && dir!=="RIGHT") inputQueue.push("LEFT");
+    else if ((k==38||k==87) && dir!=="DOWN") inputQueue.push("UP");
+    else if ((k==39||k==68) && dir!=="LEFT") inputQueue.push("RIGHT");
+    else if ((k==40||k==83) && dir!=="UP") inputQueue.push("DOWN");
+});
+
+// Touch
+let tX=0, tY=0;
+document.addEventListener('touchstart', e => { tX=e.changedTouches[0].screenX; tY=e.changedTouches[0].screenY; }, false);
+document.addEventListener('touchend', e => {
+    let dX = e.changedTouches[0].screenX - tX, dY = e.changedTouches[0].screenY - tY;
+    if (Math.abs(dX) > Math.abs(dY)) { if(dX>0 && dir!=="LEFT") inputQueue.push("RIGHT"); else if(dX<0 && dir!=="RIGHT") inputQueue.push("LEFT"); }
+    else { if(dY>0 && dir!=="UP") inputQueue.push("DOWN"); else if(dY<0 && dir!=="DOWN") inputQueue.push("UP"); }
+}, false);
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+</script>
+</body>
+</html>
