@@ -258,14 +258,27 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-// --- REQUIRED: Initialize Mini App ---
 window.addEventListener('DOMContentLoaded', () => {
     if (window.farcaster && window.farcaster.sdk) {
         window.farcaster.sdk.actions.ready();
     }
 });
 
-// --- CONFIGURATION ---
+// --- AUDIO SETUP ---
+const bgm = new Audio('music.mp3');
+bgm.loop = true; 
+bgm.volume = 0.5;
+
+const sndEat = new Audio('eat.mp3');
+const sndPower = new Audio('powerup.mp3');
+const sndOver = new Audio('gameover.mp3');
+
+function playSound(audioObj) {
+    const sound = audioObj.cloneNode();
+    sound.volume = 0.6;
+    sound.play().catch(e => console.log("Audio not loaded yet"));
+}
+
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
 
 const ABI = [
@@ -276,38 +289,41 @@ const ABI = [
   "event UserRegistered(address indexed player, string username)"
 ];
 
-// --- GAME VARIABLES ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const box = 20; 
 
+// --- FIX 1: FORCE GRID ALIGNMENT ---
+// This ensures the canvas width is ALWAYS a multiple of 20.
+// This prevents the "missing block" bug when wrapping.
 const setCanvasSize = () => {
-    const size = Math.min(window.innerWidth - 20, 400);
+    let size = Math.min(window.innerWidth - 20, 400);
+    size = Math.floor(size / box) * box; // <--- VITAL FIX
     canvas.width = size;
     canvas.height = size;
 };
 setCanvasSize();
 window.addEventListener('resize', setCanvasSize);
 
-const box = 20; 
-let snake, dir, nextDir, food, score, gameLoop;
+let snake, dir, food, score, gameLoop;
 let isPlaying = false;
 
-// --- POWER UP VARIABLES ---
-let activePowerUp = null; // { x, y, type: 'HALF' | 'DOUBLE', expireTime }
-let growthPending = 0;    // Used to smoothly double the snake length
-let powerUpTimer = null;  // Handles the random spawning
+// --- FIX 2: INPUT BUFFER ---
+// Prevents "ignored swipes" when you swipe fast.
+let inputQueue = [];
 
-// --- WALLET STATE ---
+let activePowerUp = null; 
+let growthPending = 0;    
+let powerUpTimer = null;  
+
 let provider, signer, contract;
 let userAddress, currentUsername;
 
-/* ================= UI NAVIGATION ================= */
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
 }
 
-/* ================= SCORE ANIMATION ================= */
 function animateScore(targetScore) {
     const scoreElement = document.getElementById("finalScore");
     let current = 0;
@@ -327,7 +343,6 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
-/* ================= WEB3 LOGIC ================= */
 function getProvider(type) {
     const eth = window.ethereum;
     if (!eth) return null;
@@ -346,7 +361,7 @@ async function connectSpecificWallet(walletType) {
 
     const specificProvider = getProvider(walletType);
     if (!specificProvider) {
-        alert(`${walletType === 'coinbase' ? 'Coinbase Wallet' : 'MetaMask'} not found. Please check your extension.`);
+        alert(`${walletType === 'coinbase' ? 'Coinbase Wallet' : 'MetaMask'} not found.`);
         return;
     }
 
@@ -429,13 +444,11 @@ async function submitScore() {
     }
 }
 
-/* ================= LEADERBOARD LOGIC ================= */
 async function fetchLeaderboard() {
     if (!contract) {
         document.getElementById("leaderboardList").innerText = "Connect wallet to view";
         return;
     }
-    
     try {
         const filter = contract.filters.NewScore();
         const events = await contract.queryFilter(filter, -5000); 
@@ -473,36 +486,33 @@ async function fetchLeaderboard() {
     }
 }
 
-/* ================= GAME LOGIC ================= */
 function startGame() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     
+    bgm.currentTime = 0;
+    bgm.play().catch(e => console.log("Music failed (User gesture needed)"));
+
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
-    nextDir = "RIGHT";
+    inputQueue = []; // Reset queue
     score = 0;
     
-    // Reset Power-ups
     activePowerUp = null;
     growthPending = 0;
 
     document.getElementById("scoreDisplay").innerText = "SCORE: 0";
     
     placeFood();
-    scheduleNextPowerUp(); // Start random cycle
+    scheduleNextPowerUp(); 
     isPlaying = true;
     
     if (gameLoop) clearInterval(gameLoop);
     gameLoop = setInterval(draw, 100);
 }
 
-// --- POWER UP FUNCTIONS ---
 function scheduleNextPowerUp() {
     if (powerUpTimer) clearTimeout(powerUpTimer);
-    
-    // Spawn something randomly between 5 and 15 seconds
     const delay = Math.random() * 10000 + 5000;
-    
     powerUpTimer = setTimeout(() => {
         if (!isPlaying) return;
         spawnPowerUp();
@@ -516,26 +526,23 @@ function spawnPowerUp() {
     let newItem = {
         x: Math.floor(Math.random() * cols) * box,
         y: Math.floor(Math.random() * rows) * box,
-        type: Math.random() > 0.5 ? 'HALF' : 'DOUBLE', // 50/50 chance
-        expireTime: Date.now() + 5000 // Lasts 5 seconds
+        type: Math.random() > 0.5 ? 'HALF' : 'DOUBLE', 
+        expireTime: Date.now() + 5000 
     };
     
-    // Safety check: Don't spawn on snake or food
     if (collision(newItem.x, newItem.y, snake) || (newItem.x === food.x && newItem.y === food.y)) {
-        spawnPowerUp(); // Try again
+        spawnPowerUp(); 
         return;
     }
     
     activePowerUp = newItem;
     
-    // Auto-remove after 5 seconds
     setTimeout(() => {
         if (activePowerUp && activePowerUp === newItem) {
             activePowerUp = null;
         }
     }, 5000);
     
-    // Prepare the next cycle
     scheduleNextPowerUp();
 }
 
@@ -549,24 +556,32 @@ function placeFood() {
 }
 
 function draw() {
-    // 1. Draw Background
+    // 1. Process Input Buffer
+    if (inputQueue.length > 0) {
+        let next = inputQueue.shift();
+        if (next === "LEFT" && dir !== "RIGHT") dir = "LEFT";
+        else if (next === "UP" && dir !== "DOWN") dir = "UP";
+        else if (next === "RIGHT" && dir !== "LEFT") dir = "RIGHT";
+        else if (next === "DOWN" && dir !== "UP") dir = "DOWN";
+    }
+
+    // 2. BG
     ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 2. Draw Food
+    // 3. Food
     ctx.shadowBlur = 15;
     ctx.shadowColor = "#ff00ff";
     ctx.fillStyle = "#ff00ff";
     ctx.fillRect(food.x, food.y, box-2, box-2);
     ctx.shadowBlur = 0;
 
-    // 3. Draw PowerUp (if active)
+    // 4. PowerUp
     if (activePowerUp) {
         if (Date.now() > activePowerUp.expireTime) {
             activePowerUp = null;
         } else {
             const isDouble = activePowerUp.type === 'DOUBLE';
-            // Green for Double, Red for Half
             ctx.shadowBlur = 20;
             ctx.shadowColor = isDouble ? "#00ff00" : "#ff0000"; 
             ctx.fillStyle = isDouble ? "#00ff00" : "#ff0000";
@@ -576,7 +591,6 @@ function draw() {
             ctx.fill();
             ctx.shadowBlur = 0;
             
-            // Text Label
             ctx.fillStyle = "white";
             ctx.font = "10px Arial";
             ctx.textAlign = "center";
@@ -584,7 +598,7 @@ function draw() {
         }
     }
 
-    // 4. Draw Snake
+    // 5. Snake
     for (let i = 0; i < snake.length; i++) {
         ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
         ctx.shadowBlur = (i === 0) ? 10 : 0;
@@ -593,76 +607,61 @@ function draw() {
         ctx.shadowBlur = 0;
     }
 
-    // 5. Calculate Movement
+    // 6. Move
     let snakeX = snake[0].x;
     let snakeY = snake[0].y;
 
-    dir = nextDir; 
     if (dir === "LEFT") snakeX -= box;
     if (dir === "UP") snakeY -= box;
     if (dir === "RIGHT") snakeX += box;
     if (dir === "DOWN") snakeY += box;
 
-    // --- NEW: Wall Wrapping ---
-    // If it hits wall, transport to other side
+    // 7. Wall Wrap
     if (snakeX < 0) snakeX = canvas.width - box;
     else if (snakeX >= canvas.width) snakeX = 0;
     
     if (snakeY < 0) snakeY = canvas.height - box;
     else if (snakeY >= canvas.height) snakeY = 0;
 
-    // 6. Check Self Collision
+    // 8. Self Collision
     if (collision(snakeX, snakeY, snake)) {
         gameOver();
         return;
     }
 
-    // 7. Check Food
+    // 9. Eat Food
     let ateFood = false;
     if (snakeX === food.x && snakeY === food.y) {
         score++;
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        playSound(sndEat);
         placeFood();
         ateFood = true;
     }
 
-    // 8. Check PowerUp Collision
+    // 10. Eat PowerUp
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
+        playSound(sndPower);
         if (activePowerUp.type === 'HALF') {
-            // Cut snake in half immediately
             const newLen = Math.max(1, Math.floor(snake.length / 2));
             snake = snake.slice(0, newLen);
-            
-            // --- NEW: Cut Score in Half ---
             score = Math.floor(score / 2);
-            
         } else if (activePowerUp.type === 'DOUBLE') {
-            // Add current length to buffer to grow over time
             growthPending += snake.length;
-            
-            // --- NEW: Double the Score ---
             score = score * 2;
         }
-        
-        // Update Score Display immediately
         document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        
-        activePowerUp = null; // Remove the item
+        activePowerUp = null;
     }
 
-    // 9. Move Tail (Grow logic)
-    // If we ate food OR have pending growth (from 2x powerup), we don't pop the tail.
+    // 11. Grow/Shrink
     if (ateFood) {
-        // Just ate food, naturally grows by 1 (by not popping)
     } else if (growthPending > 0) {
-        // Using "2x" buffer, grow by 1 this frame (by not popping)
         growthPending--;
     } else {
-        // Normal movement, remove tail
         snake.pop();
     }
 
-    // 10. Add New Head
     let newHead = { x: snakeX, y: snakeY };
     snake.unshift(newHead);
 }
@@ -678,22 +677,27 @@ function gameOver() {
     isPlaying = false;
     clearInterval(gameLoop);
     if(powerUpTimer) clearTimeout(powerUpTimer);
+    
+    bgm.pause();
+    playSound(sndOver);
+    
     showScreen('screen-gameover');
     animateScore(score);
     document.getElementById('btnSave').disabled = false;
     document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
 }
 
-// Controls
-document.addEventListener("keydown", direction);
-function direction(event) {
+// Controls (Keyboard)
+document.addEventListener("keydown", function(event) {
     const key = event.keyCode;
-    if ((key == 37 || key == 65) && dir != "RIGHT") nextDir = "LEFT";
-    else if ((key == 38 || key == 87) && dir != "DOWN") nextDir = "UP";
-    else if ((key == 39 || key == 68) && dir != "LEFT") nextDir = "RIGHT";
-    else if ((key == 40 || key == 83) && dir != "UP") nextDir = "DOWN";
-}
+    // Add to buffer instead of setting directly
+    if (key == 37 || key == 65) inputQueue.push("LEFT");
+    else if (key == 38 || key == 87) inputQueue.push("UP");
+    else if (key == 39 || key == 68) inputQueue.push("RIGHT");
+    else if (key == 40 || key == 83) inputQueue.push("DOWN");
+});
 
+// Controls (Touch)
 let touchStartX = 0;
 let touchStartY = 0;
 
@@ -713,11 +717,11 @@ function handleSwipe(startX, startY, endX, endY) {
     let yDiff = endY - startY;
 
     if (Math.abs(xDiff) > Math.abs(yDiff)) {
-        if (xDiff > 0 && dir != "LEFT") nextDir = "RIGHT";
-        else if (xDiff < 0 && dir != "RIGHT") nextDir = "LEFT";
+        if (xDiff > 0) inputQueue.push("RIGHT");
+        else if (xDiff < 0) inputQueue.push("LEFT");
     } else {
-        if (yDiff > 0 && dir != "UP") nextDir = "DOWN";
-        else if (yDiff < 0 && dir != "DOWN") nextDir = "UP";
+        if (yDiff > 0) inputQueue.push("DOWN");
+        else if (yDiff < 0) inputQueue.push("UP");
     }
 }
 </script>
