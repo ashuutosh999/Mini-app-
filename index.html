@@ -31,8 +31,17 @@
     --bg-dark: #050510;
   }
 
-  body {
+  html, body {
+    /* FIX 1: Stop "Rubber Banding" scroll on iOS/Android */
+    overscroll-behavior: none; 
     margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* Stop scrollbars */
+  }
+
+  body {
     background-color: var(--bg-dark);
     background-image: 
       linear-gradient(rgba(0, 82, 255, 0.1) 1px, transparent 1px),
@@ -43,8 +52,7 @@
     align-items: center;
     color: white;
     font-family: 'Rajdhani', sans-serif;
-    overflow: hidden;
-    touch-action: none;
+    touch-action: none; /* FIX 2: Stop browser zooming/panning */
   }
 
   #ui-layer {
@@ -293,12 +301,10 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const box = 20; 
 
-// --- FIX 1: FORCE GRID ALIGNMENT ---
-// This ensures the canvas width is ALWAYS a multiple of 20.
-// This prevents the "missing block" bug when wrapping.
+// --- FIX: CANVAS SIZING ---
 const setCanvasSize = () => {
     let size = Math.min(window.innerWidth - 20, 400);
-    size = Math.floor(size / box) * box; // <--- VITAL FIX
+    size = Math.floor(size / box) * box; 
     canvas.width = size;
     canvas.height = size;
 };
@@ -307,9 +313,6 @@ window.addEventListener('resize', setCanvasSize);
 
 let snake, dir, food, score, gameLoop;
 let isPlaying = false;
-
-// --- FIX 2: INPUT BUFFER ---
-// Prevents "ignored swipes" when you swipe fast.
 let inputQueue = [];
 
 let activePowerUp = null; 
@@ -494,7 +497,7 @@ function startGame() {
 
     snake = [{ x: 10 * box, y: 10 * box }];
     dir = "RIGHT";
-    inputQueue = []; // Reset queue
+    inputQueue = []; 
     score = 0;
     
     activePowerUp = null;
@@ -556,7 +559,6 @@ function placeFood() {
 }
 
 function draw() {
-    // 1. Process Input Buffer
     if (inputQueue.length > 0) {
         let next = inputQueue.shift();
         if (next === "LEFT" && dir !== "RIGHT") dir = "LEFT";
@@ -565,18 +567,15 @@ function draw() {
         else if (next === "DOWN" && dir !== "UP") dir = "DOWN";
     }
 
-    // 2. BG
     ctx.fillStyle = "rgba(5, 5, 16, 0.6)"; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 3. Food
     ctx.shadowBlur = 15;
     ctx.shadowColor = "#ff00ff";
     ctx.fillStyle = "#ff00ff";
     ctx.fillRect(food.x, food.y, box-2, box-2);
     ctx.shadowBlur = 0;
 
-    // 4. PowerUp
     if (activePowerUp) {
         if (Date.now() > activePowerUp.expireTime) {
             activePowerUp = null;
@@ -598,7 +597,6 @@ function draw() {
         }
     }
 
-    // 5. Snake
     for (let i = 0; i < snake.length; i++) {
         ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
         ctx.shadowBlur = (i === 0) ? 10 : 0;
@@ -607,7 +605,6 @@ function draw() {
         ctx.shadowBlur = 0;
     }
 
-    // 6. Move
     let snakeX = snake[0].x;
     let snakeY = snake[0].y;
 
@@ -616,20 +613,17 @@ function draw() {
     if (dir === "RIGHT") snakeX += box;
     if (dir === "DOWN") snakeY += box;
 
-    // 7. Wall Wrap
     if (snakeX < 0) snakeX = canvas.width - box;
     else if (snakeX >= canvas.width) snakeX = 0;
     
     if (snakeY < 0) snakeY = canvas.height - box;
     else if (snakeY >= canvas.height) snakeY = 0;
 
-    // 8. Self Collision
     if (collision(snakeX, snakeY, snake)) {
         gameOver();
         return;
     }
 
-    // 9. Eat Food
     let ateFood = false;
     if (snakeX === food.x && snakeY === food.y) {
         score++;
@@ -639,7 +633,6 @@ function draw() {
         ateFood = true;
     }
 
-    // 10. Eat PowerUp
     if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
         playSound(sndPower);
         if (activePowerUp.type === 'HALF') {
@@ -654,7 +647,6 @@ function draw() {
         activePowerUp = null;
     }
 
-    // 11. Grow/Shrink
     if (ateFood) {
     } else if (growthPending > 0) {
         growthPending--;
@@ -687,19 +679,22 @@ function gameOver() {
     document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
 }
 
-// Controls (Keyboard)
 document.addEventListener("keydown", function(event) {
     const key = event.keyCode;
-    // Add to buffer instead of setting directly
     if (key == 37 || key == 65) inputQueue.push("LEFT");
     else if (key == 38 || key == 87) inputQueue.push("UP");
     else if (key == 39 || key == 68) inputQueue.push("RIGHT");
     else if (key == 40 || key == 83) inputQueue.push("DOWN");
 });
 
-// Controls (Touch)
+// --- TOUCH CONTROLS WITH PULL-TO-REFRESH PREVENTION ---
 let touchStartX = 0;
 let touchStartY = 0;
+
+// FIX 3: Prevent Scrolling/Refresh on touch move
+document.addEventListener('touchmove', function(e) {
+    e.preventDefault(); 
+}, { passive: false });
 
 document.addEventListener('touchstart', function(event) {
     touchStartX = event.changedTouches[0].screenX;
