@@ -297,15 +297,20 @@
 
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@0.0.1/dist/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@farcaster/miniapp-sdk@latest/dist/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-window.addEventListener('DOMContentLoaded', () => {
+// ✅ FIXED: Safe Initialization Logic (Prevents "Stuck on Logo")
+const initializeFarcaster = () => {
+    // Keep trying every 300ms until the SDK is found
     if (window.farcaster && window.farcaster.sdk) {
         window.farcaster.sdk.actions.ready();
+    } else {
+        setTimeout(initializeFarcaster, 300);
     }
-});
+};
+initializeFarcaster();
 
 // --- AUDIO MANAGER ---
 const audioFiles = {
