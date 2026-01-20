@@ -5,12 +5,14 @@
     "signature": "fs5dsefS51O/3KfL+NPHslOzb0ZJWyDrWdfx0qfIlGEN3ApUCSuBqkEoqPj+v5HqC6BwiktEQltcAgR/dKDmOBw="
   },
   "miniapp": {
-    "version": "0.0.1",
-    "name": "Base Snake",
-    "description": "Play Snake on Base and save your score on-chain!",
-    "iconUrl": "https://raw.githubusercontent.com/ashuutosh999/Mini-app-/main/Gemini_Generated_Image_td1bu1td1bu1td1b.png" ,
-    "homeUrl": "https://mini-app-phi-ashen.vercel.app", 
-    "splashImageUrl": "https://raw.githubusercontent.com/ashuutosh999/Mini-app-/main/Gemini_Generated_Image_td1bu1td1bu1td1b.png" ,
-    "splashBackgroundColor": "#050510"
+    "version": "next",
+    "name": "Base Snakes",
+    "homeUrl": "https://mini-app-phi-ashen.vercel.app/",
+    "iconUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
+    "splashImageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
+    "splashBackgroundColor": "#050510",
+    "description": "Play the ultimate crypto snake game on Base!",
+    "primaryCategory": "gaming",
+    "tags": ["game", "base", "snakes"]
   }
 }
