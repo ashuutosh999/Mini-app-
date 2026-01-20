@@ -1,304 +1,326 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Base Snakes 🟦</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0052FF">
+    <meta charset="UTF-8">
+    <title>Base Snakes 🟦</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0052FF">
 
-<meta property="og:title" content="Base Snakes 🐍" />
-<meta property="og:description" content="Play the ultimate crypto snake game on Base!" />
-<meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
+    <meta property="og:title" content="Base Snakes 🐍" />
+    <meta property="og:description" content="Play the ultimate crypto snake game on Base!" />
+    <meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
 
-<meta property="fc:miniapp" content='{
-  "version": "next",
-  "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
-  "button": {
-    "title": "Play Base Snakes",
-    "action": {
-      "type": "launch_miniapp",
-      "name": "Base Snakes",
-      "url": "https://mini-app-phi-ashen.vercel.app/", 
-      "splashImageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
-      "splashBackgroundColor": "#050510"
-    }
-  }
-}' />
+    <meta property="fc:miniapp" content='{
+      "version": "next",
+      "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
+      "button": {
+        "title": "Play Base Snakes",
+        "action": {
+          "type": "launch_miniapp",
+          "name": "Base Snakes",
+          "url": "https://mini-app-phi-ashen.vercel.app/", 
+          "splashImageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png",
+          "splashBackgroundColor": "#050510"
+        }
+      }
+    }' />
 
-<script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@3.7.2/dist/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@3.7.2/dist/index.js"></script>
 
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
 
-  :root {
-    --base-blue: #0052FF;
-    --neon-blue: #00e5ff;
-    --neon-pink: #ff00ff;
-    --warpcast-purple: #855DCD;
-    --bg-dark: #050510;
-  }
+        :root {
+            --base-blue: #0052FF;
+            --neon-blue: #00e5ff;
+            --neon-pink: #ff00ff;
+            --warpcast-purple: #855DCD;
+            --bg-dark: #050510;
+        }
 
-  html, body {
-    overscroll-behavior: none; 
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    overflow: hidden; 
-  }
+        html, body {
+            overscroll-behavior: none;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
 
-  body {
-    background-color: var(--bg-dark);
-    background-image: 
-      linear-gradient(rgba(0, 82, 255, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 82, 255, 0.1) 1px, transparent 1px);
-    background-size: 20px 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    color: white;
-    font-family: 'Rajdhani', sans-serif;
-    touch-action: none; 
-  }
+        body {
+            background-color: var(--bg-dark);
+            background-image: linear-gradient(rgba(0, 82, 255, 0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 82, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            touch-action: none;
+        }
 
-  /* Developer Credit */
-  .dev-credit {
-    position: absolute;
-    top: 10px;
-    width: 100%;
-    text-align: center;
-    font-size: 12px;
-    color: #666;
-    font-family: 'Rajdhani', sans-serif;
-    z-index: 5;
-    pointer-events: none;
-    letter-spacing: 1px;
-  }
+        /* Developer Credit */
+        .dev-credit {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            font-family: 'Rajdhani', sans-serif;
+            z-index: 5;
+            pointer-events: none;
+            letter-spacing: 1px;
+        }
 
-  #ui-layer {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-  }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
 
-  .screen {
-    pointer-events: auto;
-    background: rgba(0, 0, 0, 0.95);
-    border: 2px solid var(--base-blue);
-    padding: 24px;
-    border-radius: 16px;
-    text-align: center;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 0 25px rgba(0, 82, 255, 0.5);
-    width: 85%;
-    max-width: 320px;
-    display: none;
-  }
-  
-  .screen.active { display: block; }
+        .screen {
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid var(--base-blue);
+            padding: 24px;
+            border-radius: 16px;
+            text-align: center;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 0 25px rgba(0, 82, 255, 0.5);
+            width: 85%;
+            max-width: 320px;
+            display: none;
+        }
 
-  h1 { 
-    font-family: 'Press Start 2P', cursive; 
-    color: var(--base-blue); 
-    text-shadow: 2px 2px #fff;
-    font-size: 22px;
-    margin-bottom: 20px;
-    line-height: 1.4;
-  }
+        .screen.active {
+            display: block;
+        }
 
-  input {
-    background: #111;
-    border: 1px solid var(--base-blue);
-    color: white;
-    padding: 12px;
-    font-size: 16px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    width: 100%;
-    box-sizing: border-box;
-    text-align: center;
-    font-family: 'Rajdhani', sans-serif;
-  }
+        h1 {
+            font-family: 'Press Start 2P', cursive;
+            color: var(--base-blue);
+            text-shadow: 2px 2px #fff;
+            font-size: 22px;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
 
-  button {
-    background: var(--base-blue);
-    color: white;
-    border: none;
-    padding: 14px 24px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: transform 0.1s;
-    font-family: 'Press Start 2P', cursive;
-    width: 100%;
-    margin-top: 8px;
-    text-transform: uppercase;
-  }
-  
-  button:active { transform: scale(0.95); }
-  button:disabled { background: #555; cursor: not-allowed; }
+        input {
+            background: #111;
+            border: 1px solid var(--base-blue);
+            color: white;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            font-family: 'Rajdhani', sans-serif;
+        }
 
-  /* Share Button Styling */
-  .btn-share {
-    background: var(--warpcast-purple);
-    border: 1px solid #fff;
-    box-shadow: 0 0 10px var(--warpcast-purple);
-    margin-bottom: 10px;
-  }
+        button {
+            background: var(--base-blue);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+            font-family: 'Press Start 2P', cursive;
+            width: 100%;
+            margin-top: 8px;
+            text-transform: uppercase;
+        }
 
-  .wallet-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: #1a1a2e;
-    border: 1px solid #333;
-    margin-bottom: 10px;
-  }
-  .wallet-btn:hover { background: #2a2a40; border-color: var(--base-blue); }
-  .wallet-icon { width: 24px; height: 24px; }
+        button:active {
+            transform: scale(0.95);
+        }
 
-  #hud {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    max-width: 400px;
-    padding: 10px;
-    box-sizing: border-box;
-    font-size: 18px;
-    font-weight: bold;
-    text-shadow: 0 0 5px var(--neon-blue);
-    margin-top: 25px; 
-  }
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
 
-  canvas {
-    background: rgba(0,0,0,0.8);
-    border: 2px solid var(--base-blue);
-    border-radius: 12px;
-    box-shadow: 0 0 15px var(--base-blue);
-    display: block;
-  }
+        /* Share Button Styling */
+        .btn-share {
+            background: var(--warpcast-purple);
+            border: 1px solid #fff;
+            box-shadow: 0 0 10px var(--warpcast-purple);
+            margin-bottom: 10px;
+        }
 
-  .leaderboard-container {
-    margin-top: 15px;
-    width: 90%;
-    max-width: 350px;
-    background: rgba(0,0,0,0.6);
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 10px;
-    max-height: 150px;
-    overflow-y: auto;
-    font-size: 14px;
-  }
-  
-  .lb-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    border-bottom: 1px solid #222;
-  }
-  .lb-rank { color: var(--neon-pink); font-weight: bold; }
-  .lb-name { color: white; }
-  .lb-score { color: var(--neon-blue); }
+        .wallet-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            margin-bottom: 10px;
+        }
 
-  .mobile-hint {
-    margin-top: 10px;
-    color: #666;
-    font-size: 12px;
-    display: none;
-  }
-  @media (hover: none) {
-    .mobile-hint { display: block; }
-  }
-  
-  #finalScore {
-    font-size: 32px;
-    color: var(--neon-blue);
-    font-weight: bold;
-    text-shadow: 0 0 10px var(--neon-blue);
-  }
+        .wallet-btn:hover {
+            background: #2a2a40;
+            border-color: var(--base-blue);
+        }
 
-</style>
+        .wallet-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 5px var(--neon-blue);
+            margin-top: 25px;
+        }
+
+        canvas {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid var(--base-blue);
+            border-radius: 12px;
+            box-shadow: 0 0 15px var(--base-blue);
+            display: block;
+        }
+
+        .leaderboard-container {
+            margin-top: 15px;
+            width: 90%;
+            max-width: 350px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+
+        .lb-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #222;
+        }
+
+        .lb-rank {
+            color: var(--neon-pink);
+            font-weight: bold;
+        }
+
+        .lb-name {
+            color: white;
+        }
+
+        .lb-score {
+            color: var(--neon-blue);
+        }
+
+        .mobile-hint {
+            margin-top: 10px;
+            color: #666;
+            font-size: 12px;
+            display: none;
+        }
+
+        @media (hover: none) {
+            .mobile-hint {
+                display: block;
+            }
+        }
+
+        #finalScore {
+            font-size: 32px;
+            color: var(--neon-blue);
+            font-weight: bold;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+    </style>
 </head>
 <body>
 
-  <div class="dev-credit">developed by - @ashutosh9</div>
+    <div class="dev-credit">developed by - @ashutosh9</div>
 
-  <div id="hud">
-    <div id="scoreDisplay">SCORE: 0</div>
-    <div id="walletDisplay">🔴 Not Connected</div>
-  </div>
-
-  <canvas id="game"></canvas>
-
-  <div class="mobile-hint">👆 Swipe to turn • Tap to speed up</div>
-
-  <div class="leaderboard-container">
-    <div style="text-align:center; color: var(--base-blue); font-weight:bold; margin-bottom:5px;">🏆 MONTHLY LEADERS</div>
-    <div id="leaderboardList">Loading...</div>
-  </div>
-
-  <div id="ui-layer">
-    
-    <div id="screen-connect" class="screen active">
-      <h1>BASE SNAKES</h1>
-      <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
+    <div id="hud">
+        <div id="scoreDisplay">SCORE: 0</div>
+        <div id="walletDisplay">🔴 Not Connected</div>
     </div>
 
-    <div id="screen-wallet-select" class="screen">
-      <h1>CHOOSE WALLET</h1>
-      <button class="wallet-btn" onclick="autoConnect()">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
-        MetaMask
-      </button>
-      <button class="wallet-btn" onclick="autoConnect()">
-        <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
-        Coinbase Wallet
-      </button>
-      <div style="margin-top:15px; font-size:12px; color:#666; cursor:pointer;" onclick="showScreen('screen-connect')">
-        ← Go Back
-      </div>
+    <canvas id="game"></canvas>
+
+    <div class="mobile-hint">👆 Swipe to turn • Tap to speed up</div>
+
+    <div class="leaderboard-container">
+        <div style="text-align:center; color: var(--base-blue); font-weight:bold; margin-bottom:5px;">🏆 MONTHLY LEADERS</div>
+        <div id="leaderboardList">Loading...</div>
     </div>
 
-    <div id="screen-register" class="screen">
-      <h1>NEW PLAYER</h1>
-      <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter a username to link to your wallet.</p>
-      <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
-      <br>
-      <button onclick="registerUser()">REGISTER</button>
+    <div id="ui-layer">
+
+        <div id="screen-connect" class="screen active">
+            <h1>BASE SNAKES</h1>
+            <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
+            <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
+        </div>
+
+        <div id="screen-wallet-select" class="screen">
+            <h1>CHOOSE WALLET</h1>
+            <button class="wallet-btn" onclick="autoConnect()">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
+                MetaMask
+            </button>
+            <button class="wallet-btn" onclick="autoConnect()">
+                <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
+                Coinbase Wallet
+            </button>
+            <div style="margin-top:15px; font-size:12px; color:#666; cursor:pointer;" onclick="showScreen('screen-connect')">
+                ← Go Back
+            </div>
+        </div>
+
+        <div id="screen-register" class="screen">
+            <h1>NEW PLAYER</h1>
+            <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter a username to link to your wallet.</p>
+            <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
+            <br>
+            <button onclick="registerUser()">REGISTER</button>
+        </div>
+
+        <div id="screen-start" class="screen">
+            <h1 id="welcomeMsg">WELCOME</h1>
+            <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
+            <button onclick="unlockAudioAndStart()">▶ START GAME</button>
+        </div>
+
+        <div id="screen-gameover" class="screen">
+            <h1 style="color:var(--neon-pink)">GAME OVER</h1>
+            <p>Score: <span id="finalScore">0</span></p>
+            <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
+            <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
+            <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
+        </div>
+
     </div>
 
-    <div id="screen-start" class="screen">
-      <h1 id="welcomeMsg">WELCOME</h1>
-      <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
-      <button onclick="unlockAudioAndStart()">▶ START GAME</button>
-    </div>
-
-    <div id="screen-gameover" class="screen">
-      <h1 style="color:var(--neon-pink)">GAME OVER</h1>
-      <p>Score: <span id="finalScore">0</span></p>
-      <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
-      <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
-      <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
-    </div>
-
-  </div>
-
-<script type="module">
-  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-  sdk.actions.ready();
-</script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-
-<script>
-// --- CONFIGURATION ---
-const CONTRACT_
+    <script type="module">
+        import { sdk } from '
