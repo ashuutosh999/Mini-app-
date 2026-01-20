@@ -14,7 +14,7 @@
 <meta property="og:image" content="https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png" />
 
 <meta name="fc:miniapp" content='{
-  "version": "next",
+  "version": "1",
   "imageUrl": "https://mini-app-phi-ashen.vercel.app/Gemini_Generated_Image_td1bu1td1bu1td1b.png", 
   "button": {
     "title": "Play Base Snakes",
@@ -251,18 +251,18 @@
     <div id="screen-connect" class="screen active">
       <h1>BASE SNAKES</h1>
       <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      <button id="mainConnectBtn" onclick="autoConnect()">🔗 CONNECT WALLET</button>
+      <button id="mainConnectBtn" onclick="manualConnect()">🔗 CONNECT WALLET</button>
     </div>
 
     <div id="screen-wallet-select" class="screen">
       <h1>CHOOSE WALLET</h1>
        
-      <button class="wallet-btn" onclick="connectSpecificWallet('metamask')">
+      <button class="wallet-btn" onclick="manualConnect()">
         <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
         MetaMask
       </button>
 
-      <button class="wallet-btn" onclick="connectSpecificWallet('coinbase')">
+      <button class="wallet-btn" onclick="manualConnect()">
         <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
         Coinbase Wallet
       </button>
@@ -302,81 +302,87 @@
 
 <script type="module">
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-   
-  // 1. Ready signal for Farcaster
+  // Ready signal for Farcaster
   sdk.actions.ready();
-
-  // 2. Trigger Auto-Connect logic with a small delay for mobile injection
-  setTimeout(() => {
-    if (window.autoConnect) {
-        window.autoConnect(); 
-    }
-  }, 300);
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 
 <script>
-// ✅ FIXED: Robust Wallet Polling
-// This will keep looking for the wallet for 3 seconds on mobile
-window.autoConnect = function() {
+// Global Vars
+let provider, signer, contract;
+let userAddress, currentUsername;
+const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
+
+// ✅ NEW: Direct Connection Logic (Fixes Popup Blocking)
+async function manualConnect() {
     const btn = document.getElementById("mainConnectBtn");
-    if(btn) btn.innerText = "DETECTING...";
+    
+    // 1. Check if wallet exists immediately
+    if (!window.ethereum) {
+        btn.innerText = "NO WALLET FOUND";
+        return alert("No crypto wallet found. Please install MetaMask or Coinbase Wallet.");
+    }
 
-    let attempts = 0;
-    const maxAttempts = 30; // 3 seconds total
+    btn.innerText = "CONNECTING...";
 
-    // Create a loop that checks every 100ms
-    const checkInterval = setInterval(async () => {
-        attempts++;
+    try {
+        // 2. Direct connection attempt (No timers!)
+        provider = new ethers.providers.Web3Provider(window.ethereum);
         
-        // Check if Ethereum provider is injected
+        // This triggers the popup immediately
+        await provider.send("eth_requestAccounts", []); 
+        
+        // 3. Success! Run setup
+        await setupAfterConnect();
+        
+    } catch (err) {
+        console.error("User rejected or error:", err);
+        btn.innerText = "RETRY CONNECT";
+    }
+}
+
+// Logic that runs after wallet is confirmed
+async function setupAfterConnect() {
+    // Re-initialize provider to be safe
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    
+    const network = await provider.getNetwork();
+    if (network.chainId !== 8453 && network.chainId !== 84532) {
+         alert("Please switch to Base Network!");
+    }
+
+    signer = provider.getSigner();
+    userAddress = await signer.getAddress();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+    // Update UI
+    document.getElementById("walletDisplay").innerHTML = 
+        `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+    
+    // Proceed to Game
+    checkRegistration();
+    fetchLeaderboard();
+}
+
+// Auto-detect on page load (Passive check only)
+window.onload = function() {
+    setTimeout(async () => {
         if (window.ethereum) {
-            clearInterval(checkInterval); // Found it! Stop checking.
-            
-            if(btn) btn.innerText = "CONNECTING...";
-            
             try {
-                // Initialize Ethers with the found provider
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                
-                // Check Network
-                const network = await provider.getNetwork();
-                if (network.chainId !== 8453 && network.chainId !== 84532) {
-                      alert("Please switch to Base Network!");
+                // Just check if we are ALREADY connected (permissions granted)
+                // We do NOT call eth_requestAccounts here to avoid popups
+                const tempProvider = new ethers.providers.Web3Provider(window.ethereum);
+                const accounts = await tempProvider.listAccounts();
+                if (accounts.length > 0) {
+                    setupAfterConnect();
                 }
-
-                // Setup Contracts
-                signer = provider.getSigner();
-                userAddress = await signer.getAddress();
-                contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-                // Update UI
-                document.getElementById("walletDisplay").innerHTML = 
-                    `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-
-                // Proceed to Game
-                checkRegistration();
-                fetchLeaderboard();
-
-            } catch (err) {
-                console.error("Connection failed:", err);
-                if(btn) btn.innerText = "RETRY CONNECT";
+            } catch (e) {
+                console.log("Not already connected");
             }
-
-        } else if (attempts >= maxAttempts) {
-            // Timed out (Wallet not found after 3 seconds)
-            clearInterval(checkInterval);
-            console.log("No wallet detected.");
-            if(btn) btn.innerText = "🔗 CONNECT WALLET"; 
-            
-            // Optional: If auto-fail, show the manual select screen as fallback
-            // showScreen('screen-wallet-select');
         }
-    }, 100); // Check every 100ms
+    }, 500);
 };
-
 
 // --- AUDIO MANAGER ---
 const audioFiles = {
@@ -396,7 +402,6 @@ Object.keys(audioFiles).forEach(key => {
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
-// FIX: Audio Unlocker - Called on Click interactions
 function unlockAudioAndStart() {
     Object.values(sounds).forEach(snd => {
         if(snd.paused) {
@@ -412,7 +417,6 @@ function unlockAudioAndStart() {
     startGame();
 }
 
-// Helper: Play SFX with overlapping support
 function playSound(name) {
     if (!sounds[name]) return;
     if (name !== 'bgm') {
@@ -437,8 +441,6 @@ function shareScore() {
 }
 
 // --- WEB3 ---
-const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
-
 const ABI = [
   "function registerUser(string username) public",
   "function saveScore(uint256 score) public",
@@ -467,8 +469,7 @@ let gameSpeed = 130;
 let activePowerUp = null; 
 let growthPending = 0;    
 let powerUpTimer = null;  
-let provider, signer, contract;
-let userAddress, currentUsername;
+
 
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -496,8 +497,7 @@ function animateScore(targetScore) {
 
 // Classic Manual Connection (Fallback)
 async function connectSpecificWallet(walletType) {
-    // If user clicks a specific wallet manually, use the same logic
-    window.autoConnect();
+    manualConnect();
 }
 
 async function checkRegistration() {
