@@ -265,6 +265,7 @@
 
 <script type="module">
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+  window.sdk = sdk; 
   sdk.actions.ready();
 </script>
 
@@ -413,11 +414,17 @@ function stopMusic() {
     sounds.bgm.currentTime = 0;
 }
 
+// FIXED: Use SDK for sharing if available
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
     const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
     const intentUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(appUrl)}`;
-    window.open(intentUrl, '_blank');
+
+    if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
+        window.sdk.actions.openUrl(intentUrl);
+    } else {
+        window.open(intentUrl, '_blank');
+    }
 }
 
 // --- WEB3 ABI ---
