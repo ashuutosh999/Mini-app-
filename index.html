@@ -153,18 +153,6 @@
     margin-bottom: 10px;
   }
 
-  .wallet-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: #1a1a2e;
-    border: 1px solid #333;
-    margin-bottom: 10px;
-  }
-  .wallet-btn:hover { background: #2a2a40; border-color: var(--base-blue); }
-  .wallet-icon { width: 24px; height: 24px; }
-
   #hud {
     display: flex;
     justify-content: space-between;
@@ -234,7 +222,7 @@
 
   <div id="hud">
     <div id="scoreDisplay">SCORE: 0</div>
-    <div id="walletDisplay">🔴 Not Connected</div>
+    <div id="walletDisplay" style="font-size:14px; opacity:0.7"></div>
   </div>
 
   <canvas id="game"></canvas>
@@ -243,47 +231,22 @@
 
   <div class="leaderboard-container">
     <div style="text-align:center; color: var(--base-blue); font-weight:bold; margin-bottom:5px;">🏆 MONTHLY LEADERS</div>
-    <div id="leaderboardList">Loading...</div>
+    <div id="leaderboardList">Connect wallet to view</div>
   </div>
 
   <div id="ui-layer">
     
-    <div id="screen-connect" class="screen active">
+    <div id="screen-register" class="screen active">
       <h1>BASE SNAKES</h1>
-      <p style="margin-bottom:20px; color:#aaa; font-size:14px;">Connect wallet to play & save scores on-chain.</p>
-      <button id="mainConnectBtn" onclick="manualConnect()">🔗 CONNECT WALLET</button>
-    </div>
-
-    <div id="screen-wallet-select" class="screen">
-      <h1>CHOOSE WALLET</h1>
-       
-      <button class="wallet-btn" onclick="manualConnect()">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" class="wallet-icon" alt="MetaMask">
-        MetaMask
-      </button>
-
-      <button class="wallet-btn" onclick="manualConnect()">
-        <img src="https://avatars.githubusercontent.com/u/18060234?s=200&v=4" class="wallet-icon" alt="Coinbase">
-        Coinbase Wallet
-      </button>
-
-      <div style="margin-top:15px; font-size:12px; color:#666; cursor:pointer;" onclick="showScreen('screen-connect')">
-        ← Go Back
-      </div>
-    </div>
-
-    <div id="screen-register" class="screen">
-      <h1>NEW PLAYER</h1>
-      <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter a username to link to your wallet.</p>
+      <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter username to play</p>
       <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
       <br>
-      <button onclick="registerUser()">REGISTER</button>
+      <button onclick="setLocalNameAndPlay()">PLAY NOW</button>
     </div>
 
     <div id="screen-start" class="screen">
       <h1 id="welcomeMsg">WELCOME</h1>
-      <p style="margin-bottom:20px;">Personal Best: <span id="personalBest" style="color:var(--neon-blue)">0</span></p>
-       
+      <p style="margin-bottom:20px;">Ready to eat?</p>
       <button onclick="unlockAudioAndStart()">▶ START GAME</button>
     </div>
 
@@ -293,7 +256,7 @@
        
       <button class="btn-share" onclick="shareScore()">📤 SHARE ON FARCASTER</button>
        
-      <button id="btnSave" onclick="submitScore()">💾 SAVE ON-CHAIN</button>
+      <button id="btnSave" onclick="handleChainSave()">💾 SAVE ON-CHAIN</button>
        
       <button onclick="unlockAudioAndStart()">🔄 RESTART</button>
     </div>
@@ -302,7 +265,6 @@
 
 <script type="module">
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
-  // Ready signal for Farcaster
   sdk.actions.ready();
 </script>
 
@@ -314,75 +276,97 @@ let provider, signer, contract;
 let userAddress, currentUsername;
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
 
-// ✅ NEW: Direct Connection Logic (Fixes Popup Blocking)
-async function manualConnect() {
-    const btn = document.getElementById("mainConnectBtn");
+// --- GAME LOGIC START ---
+
+// 1. Local Login (No Wallet)
+function setLocalNameAndPlay() {
+    const name = document.getElementById("usernameInput").value.trim();
+    if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
     
-    // 1. Check if wallet exists immediately
-    if (!window.ethereum) {
-        btn.innerText = "NO WALLET FOUND";
-        return alert("No crypto wallet found. Please install MetaMask or Coinbase Wallet.");
+    currentUsername = name;
+    
+    // Update UI
+    document.getElementById("welcomeMsg").innerText = `HI, ${currentUsername.toUpperCase()}`;
+    showScreen('screen-start');
+}
+
+// 2. The Logic to Connect + Register (if needed) + Save Score
+async function handleChainSave() {
+    const btn = document.getElementById('btnSave');
+    
+    // Step A: Connect Wallet if not connected
+    if (!contract) {
+        btn.innerText = "CONNECTING...";
+        const connected = await connectWalletSilent();
+        if (!connected) {
+            btn.innerText = "💾 SAVE ON-CHAIN";
+            return; 
+        }
     }
 
-    btn.innerText = "CONNECTING...";
+    btn.disabled = true;
 
     try {
-        // 2. Direct connection attempt (No timers!)
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        
-        // This triggers the popup immediately
-        await provider.send("eth_requestAccounts", []); 
-        
-        // 3. Success! Run setup
-        await setupAfterConnect();
-        
-    } catch (err) {
-        console.error("User rejected or error:", err);
-        btn.innerText = "RETRY CONNECT";
-    }
-}
+        // Step B: Check if user is already registered on-chain
+        btn.innerText = "CHECKING REG...";
+        const player = await contract.getPlayer(userAddress);
+        const registeredName = player[0];
 
-// Logic that runs after wallet is confirmed
-async function setupAfterConnect() {
-    // Re-initialize provider to be safe
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    
-    const network = await provider.getNetwork();
-    if (network.chainId !== 8453 && network.chainId !== 84532) {
-         alert("Please switch to Base Network!");
-    }
-
-    signer = provider.getSigner();
-    userAddress = await signer.getAddress();
-    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-    // Update UI
-    document.getElementById("walletDisplay").innerHTML = 
-        `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-    
-    // Proceed to Game
-    checkRegistration();
-    fetchLeaderboard();
-}
-
-// Auto-detect on page load (Passive check only)
-window.onload = function() {
-    setTimeout(async () => {
-        if (window.ethereum) {
-            try {
-                // Just check if we are ALREADY connected (permissions granted)
-                // We do NOT call eth_requestAccounts here to avoid popups
-                const tempProvider = new ethers.providers.Web3Provider(window.ethereum);
-                const accounts = await tempProvider.listAccounts();
-                if (accounts.length > 0) {
-                    setupAfterConnect();
-                }
-            } catch (e) {
-                console.log("Not already connected");
-            }
+        // Step C: Register if they are new (using the name they typed earlier)
+        if (!registeredName) {
+            btn.innerText = "REGISTERING...";
+            const txReg = await contract.registerUser(currentUsername);
+            await txReg.wait();
+        } else {
+            console.log("User already registered as:", registeredName);
         }
-    }, 500);
-};
+
+        // Step D: Save Score
+        btn.innerText = "SIGNING SCORE...";
+        const txScore = await contract.saveScore(score);
+        
+        btn.innerText = "MINING...";
+        await txScore.wait();
+        
+        btn.innerText = "SAVED! ✅";
+        fetchLeaderboard(); // Now we can fetch since we are connected
+
+    } catch (err) {
+        console.error(err);
+        alert("Transaction failed: " + (err.reason || err.message));
+        btn.disabled = false;
+        btn.innerText = "💾 SAVE ON-CHAIN";
+    }
+}
+
+// Helper: Connects wallet and sets up contracts
+async function connectWalletSilent() {
+    if (!window.ethereum) {
+        alert("No crypto wallet found!");
+        return false;
+    }
+    try {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []); // Triggers popup
+        
+        const network = await provider.getNetwork();
+        if (network.chainId !== 8453 && network.chainId !== 84532) {
+             alert("Please switch to Base Network!");
+             return false;
+        }
+
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        
+        // Show address in HUD
+        document.getElementById("walletDisplay").innerText = `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+        return true;
+    } catch (e) {
+        console.error("Connection denied", e);
+        return false;
+    }
+}
 
 // --- AUDIO MANAGER ---
 const audioFiles = {
@@ -393,12 +377,9 @@ const audioFiles = {
 };
 
 const sounds = {};
-
-// Preload Audio
 Object.keys(audioFiles).forEach(key => {
     sounds[key] = new Audio(audioFiles[key]);
 });
-
 sounds.bgm.loop = true; 
 sounds.bgm.volume = 0.4;
 
@@ -432,7 +413,6 @@ function stopMusic() {
     sounds.bgm.currentTime = 0;
 }
 
-// --- SHARING ---
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
     const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
@@ -440,7 +420,7 @@ function shareScore() {
     window.open(intentUrl, '_blank');
 }
 
-// --- WEB3 ---
+// --- WEB3 ABI ---
 const ABI = [
   "function registerUser(string username) public",
   "function saveScore(uint256 score) public",
@@ -470,7 +450,6 @@ let activePowerUp = null;
 let growthPending = 0;    
 let powerUpTimer = null;  
 
-
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
@@ -481,84 +460,21 @@ function animateScore(targetScore) {
     let current = 0;
     const duration = 1000;
     const startTime = performance.now();
-
     function update(time) {
         const elapsed = time - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const ease = 1 - Math.pow(1 - progress, 3);
         current = Math.floor(ease * targetScore);
         scoreElement.innerText = current;
-
         if (progress < 1) requestAnimationFrame(update);
         else scoreElement.innerText = targetScore;
     }
     requestAnimationFrame(update);
 }
 
-// Classic Manual Connection (Fallback)
-async function connectSpecificWallet(walletType) {
-    manualConnect();
-}
-
-async function checkRegistration() {
-    try {
-        const player = await contract.getPlayer(userAddress);
-        if (!player[0]) {
-            showScreen('screen-register');
-        } else {
-            currentUsername = player[0];
-            document.getElementById("welcomeMsg").innerText = `HI, ${currentUsername.toUpperCase()}`;
-            document.getElementById("personalBest").innerText = player[1].toString();
-            showScreen('screen-start');
-        }
-    } catch (e) {
-        console.log("Contract Error", e);
-        showScreen('screen-register'); 
-    }
-}
-
-async function registerUser() {
-    const name = document.getElementById("usernameInput").value;
-    if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
-
-    try {
-        const tx = await contract.registerUser(name);
-        document.querySelector('#screen-register button').innerText = "REGISTERING...";
-        await tx.wait();
-        
-        currentUsername = name;
-        showScreen('screen-start');
-    } catch (err) {
-        alert("Registration failed: " + err.message);
-        document.querySelector('#screen-register button').innerText = "REGISTER";
-    }
-}
-
-async function submitScore() {
-    if (!contract) return;
-    try {
-        const btn = document.getElementById('btnSave');
-        btn.innerText = "SIGNING...";
-        btn.disabled = true;
-
-        const tx = await contract.saveScore(score);
-        btn.innerText = "MINING...";
-        await tx.wait();
-        
-        btn.innerText = "SAVED! ✅";
-        fetchLeaderboard(); 
-    } catch (err) {
-        alert("Error saving: " + err.message);
-        document.getElementById('btnSave').disabled = false;
-        document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
-    }
-}
-
+// Only fetches if contract is available
 async function fetchLeaderboard() {
-    if (!contract) {
-        document.getElementById("leaderboardList").innerText = "Connect wallet to view";
-        return;
-    }
+    if (!contract) return;
     try {
         const filter = contract.filters.NewScore();
         const events = await contract.queryFilter(filter, -5000); 
@@ -783,8 +699,10 @@ function gameOver() {
     playSound('gameover'); 
     showScreen('screen-gameover');
     animateScore(score);
-    document.getElementById('btnSave').disabled = false;
-    document.getElementById('btnSave').innerText = "💾 SAVE ON-CHAIN";
+    // Reset button state on Game Over in case they want to retry save
+    const btn = document.getElementById('btnSave');
+    btn.disabled = false;
+    btn.innerText = "💾 SAVE ON-CHAIN";
 }
 
 document.addEventListener("keydown", function(event) {
