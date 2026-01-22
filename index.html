@@ -250,7 +250,7 @@
       <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
       <br>
       <button onclick="setLocalNameAndPlay()">PLAY NOW</button>
-      <div style="margin-top:10px; font-size:10px; color:#666;">Works with MetaMask, Rainbow, Coinbase</div>
+      <div style="margin-top:10px; font-size:10px; color:#666;">Works with Warpcast, Rainbow, MetaMask</div>
     </div>
 
     <div id="screen-start" class="screen">
@@ -286,7 +286,6 @@ let provider, signer, contract;
 let userAddress, currentUsername;
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
 // Start searching from this block (approx deployment) to ensure we get all scores
-// Since Base creates blocks very fast, "latest - 5000" is only 2 hours of history.
 const START_BLOCK = 24800000; 
 
 // --- GAME LOGIC START ---
@@ -353,14 +352,15 @@ async function handleChainSave() {
     }
 }
 
-// Helper: Better Provider Detection for Rainbow / Farcaster / Metamask
+// Helper: Better Provider Detection for Farcaster & EIP-6963
 async function getWalletProvider() {
-    // 1. Check if Farcaster injected a specific provider
-    if (window.farcaster && window.farcaster.provider) {
-        return window.farcaster.provider;
+    // 1. Check Farcaster SDK Provider (PRIORITY for Mini-Apps)
+    // The SDK exposes the provider connected to the Warpcast wallet
+    if (window.sdk && window.sdk.provider) {
+        return window.sdk.provider;
     }
     
-    // 2. Check standard EIP-1193 window.ethereum
+    // 2. Check standard EIP-1193 window.ethereum (Desktop / External Browsers)
     if (window.ethereum) {
         // Handle EIP-6963 (Multiple Injected Providers like Rainbow + Metamask)
         if (window.ethereum.providers) {
@@ -377,7 +377,8 @@ async function connectWalletSilent() {
     const ethProvider = await getWalletProvider();
     
     if (!ethProvider) {
-        alert("No crypto wallet found! If on mobile, try opening in Rainbow App or Coinbase Wallet.");
+        // Updated error message to be more helpful
+        alert("No crypto wallet found! If you are in Warpcast, try reloading the frame.");
         return false;
     }
 
@@ -538,8 +539,7 @@ async function fetchLeaderboard() {
     try {
         const filter = contract.filters.NewScore();
         
-        // CHANGE: Query from a much earlier block (or 0) instead of -5000.
-        // Base blocks are 2s, so 5000 blocks is only ~2.7 hours.
+        // Query from a fixed block to get full history
         const events = await contract.queryFilter(filter, START_BLOCK, "latest"); 
 
         const currentMonth = new Date().getMonth();
@@ -555,7 +555,6 @@ async function fetchLeaderboard() {
             }
         });
 
-        // Dedup: Only keep highest score per name? (Optional, currently keeps all entries)
         scores.sort((a,b) => b.score - a.score);
         const top5 = scores.slice(0, 5);
 
@@ -677,136 +676,4 @@ function draw() {
             ctx.fillStyle = "white";
             ctx.font = "10px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(isDouble ? "2x" : "½", activePowerUp.x + box/2, activePowerUp.y + box - 4);
-        }
-    }
-
-    for (let i = 0; i < snake.length; i++) {
-        ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
-        ctx.shadowBlur = (i === 0) ? 10 : 0;
-        ctx.shadowColor = "#ffffff";
-        ctx.fillRect(snake[i].x, snake[i].y, box-2, box-2);
-        ctx.shadowBlur = 0;
-    }
-
-    let snakeX = snake[0].x;
-    let snakeY = snake[0].y;
-
-    if (dir === "LEFT") snakeX -= box;
-    if (dir === "UP") snakeY -= box;
-    if (dir === "RIGHT") snakeX += box;
-    if (dir === "DOWN") snakeY += box;
-
-    if (snakeX < 0) snakeX = canvas.width - box;
-    else if (snakeX >= canvas.width) snakeX = 0;
-    
-    if (snakeY < 0) snakeY = canvas.height - box;
-    else if (snakeY >= canvas.height) snakeY = 0;
-
-    if (collision(snakeX, snakeY, snake)) {
-        gameOver();
-        return;
-    }
-
-    let ateFood = false;
-    if (snakeX === food.x && snakeY === food.y) {
-        score++;
-        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        playSound('eat'); 
-        placeFood();
-        ateFood = true;
-        if (score % 5 === 0) {
-            increaseSpeed();
-        }
-    }
-
-    if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
-        playSound('powerup'); 
-        if (activePowerUp.type === 'HALF') {
-            const newLen = Math.max(1, Math.floor(snake.length / 2));
-            snake = snake.slice(0, newLen);
-            score = Math.floor(score / 2);
-        } else if (activePowerUp.type === 'DOUBLE') {
-            growthPending += snake.length;
-            score = score * 2;
-        }
-        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
-        activePowerUp = null;
-        if (score % 5 === 0 && score > 0) {
-             increaseSpeed();
-        }
-    }
-
-    if (ateFood) {
-    } else if (growthPending > 0) {
-        growthPending--;
-    } else {
-        snake.pop();
-    }
-
-    let newHead = { x: snakeX, y: snakeY };
-    snake.unshift(newHead);
-}
-
-function collision(x, y, array) {
-    for (let i = 0; i < array.length; i++) {
-        if (x === array[i].x && y === array[i].y) return true;
-    }
-    return false;
-}
-
-function gameOver() {
-    isPlaying = false;
-    clearInterval(gameLoop);
-    if(powerUpTimer) clearTimeout(powerUpTimer);
-    stopMusic(); 
-    playSound('gameover'); 
-    showScreen('screen-gameover');
-    animateScore(score);
-    // Reset button state on Game Over in case they want to retry save
-    const btn = document.getElementById('btnSave');
-    btn.disabled = false;
-    btn.innerText = "💾 SAVE ON-CHAIN";
-}
-
-document.addEventListener("keydown", function(event) {
-    const key = event.keyCode;
-    if (key == 37 || key == 65) inputQueue.push("LEFT");
-    else if (key == 38 || key == 87) inputQueue.push("UP");
-    else if (key == 39 || key == 68) inputQueue.push("RIGHT");
-    else if (key == 40 || key == 83) inputQueue.push("DOWN");
-});
-
-let touchStartX = 0;
-let touchStartY = 0;
-
-document.addEventListener('touchmove', function(e) {
-    e.preventDefault(); 
-}, { passive: false });
-
-document.addEventListener('touchstart', function(event) {
-    touchStartX = event.changedTouches[0].screenX;
-    touchStartY = event.changedTouches[0].screenY;
-}, false);
-
-document.addEventListener('touchend', function(event) {
-    let touchEndX = event.changedTouches[0].screenX;
-    let touchEndY = event.changedTouches[0].screenY;
-    handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
-}, false);
-
-function handleSwipe(startX, startY, endX, endY) {
-    let xDiff = endX - startX;
-    let yDiff = endY - startY;
-
-    if (Math.abs(xDiff) > Math.abs(yDiff)) {
-        if (xDiff > 0) inputQueue.push("RIGHT");
-        else if (xDiff < 0) inputQueue.push("LEFT");
-    } else {
-        if (yDiff > 0) inputQueue.push("DOWN");
-        else if (yDiff < 0) inputQueue.push("UP");
-    }
-}
-</script>
-</body>
-</html>
+            ctx.fillText(isDouble ? "2x"
