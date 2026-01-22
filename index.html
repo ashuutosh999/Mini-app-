@@ -230,6 +230,7 @@
     </div>
     <div class="hud-right">
        <div id="walletDisplay" style="font-size:12px; opacity:0.7; font-family:'Courier New', monospace;"></div>
+       <div id="usernameDisplay" style="font-size:12px; color:var(--neon-blue); font-weight:bold;"></div>
     </div>
   </div>
 
@@ -244,7 +245,11 @@
 
   <div id="ui-layer">
     
-    <div id="screen-register" class="screen active">
+    <div id="screen-loading" class="screen active">
+      <h1 style="font-size:16px;">LOADING...</h1>
+    </div>
+
+    <div id="screen-register" class="screen">
       <h1>BASE SNAKES</h1>
       <p style="font-size:14px; color:#aaa; margin-bottom:15px;">Enter username to play</p>
       <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
@@ -285,31 +290,128 @@
 let provider, signer, contract;
 let userAddress, currentUsername;
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
-// Start searching from this block (approx deployment) to ensure we get all scores
-const START_BLOCK = 24800000; 
 
-// --- GAME LOGIC START ---
+// --- INIT: Auto Check Wallet on Load ---
+window.addEventListener('load', async () => {
+    // Small delay to ensure injections are ready
+    setTimeout(initApp, 500);
+});
 
-// 1. Local Login (No Wallet)
-function setLocalNameAndPlay() {
+async function initApp() {
+    // Try to find a provider immediately
+    const ethProvider = await getWalletProvider();
+    
+    if (ethProvider) {
+        // Attempt silent connection
+        try {
+            provider = new ethers.providers.Web3Provider(ethProvider);
+            // Just get accounts, don't force popup if already authorized
+            const accounts = await provider.listAccounts();
+            
+            if (accounts.length > 0) {
+                // Wallet already connected/authorized!
+                await setupWeb3(false); // False = don't prompt
+            } else {
+                // Wallet found but not connected, show Register Screen
+                showScreen('screen-register');
+            }
+        } catch (e) {
+            console.log("Auto-connect failed", e);
+            showScreen('screen-register');
+        }
+    } else {
+        // No wallet, just show register
+        showScreen('screen-register');
+    }
+}
+
+// 1. Local Login (Fallback or First Time)
+async function setLocalNameAndPlay() {
     const name = document.getElementById("usernameInput").value.trim();
     if (!name || name.length > 12) return alert("Invalid Name (1-12 chars)");
     
     currentUsername = name;
     
-    // Update UI
+    // If we have a wallet but didn't connect yet, try connecting now
+    // This allows us to check registration before they start playing
+    if (!contract) {
+        const success = await setupWeb3(true); // True = force popup
+        if (success) {
+            // If setupWeb3 succeeds, it will handle screen transition
+            return; 
+        }
+    }
+
+    // Fallback: Local play only
     document.getElementById("welcomeMsg").innerText = `HI, ${currentUsername.toUpperCase()}`;
     showScreen('screen-start');
 }
 
-// 2. The Logic to Connect + Register (if needed) + Save Score
+// 2. Setup Web3 & Check Registration
+async function setupWeb3(forcePrompt = true) {
+    try {
+        const ethProvider = await getWalletProvider();
+        if (!ethProvider) return false;
+
+        provider = new ethers.providers.Web3Provider(ethProvider);
+        
+        if (forcePrompt) {
+            await provider.send("eth_requestAccounts", []);
+        }
+
+        const network = await provider.getNetwork();
+        if (network.chainId !== 8453 && network.chainId !== 84532) {
+             if (forcePrompt) alert("Please switch to Base Network!");
+             return false;
+        }
+
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        
+        // UI Updates
+        document.getElementById("walletDisplay").innerText = `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+        
+        // CHECK IF REGISTERED
+        const player = await contract.getPlayer(userAddress);
+        const onChainName = player[0];
+        const bestScore = player[1] ? player[1].toNumber() : 0;
+
+        if (onChainName && onChainName !== "") {
+            // USER EXISTS: Auto-Login
+            currentUsername = onChainName;
+            document.getElementById("bestScoreDisplay").innerText = `BEST: ${bestScore}`;
+            document.getElementById("usernameDisplay").innerText = currentUsername;
+            document.getElementById("welcomeMsg").innerText = `WB, ${currentUsername.toUpperCase()}`;
+            showScreen('screen-start');
+        } else {
+            // NEW USER: Stay on Register screen (or go there if not already)
+            // If we came from setLocalNameAndPlay, we have a name, so we can proceed
+            if (currentUsername) {
+                document.getElementById("welcomeMsg").innerText = `HI, ${currentUsername.toUpperCase()}`;
+                showScreen('screen-start');
+            } else {
+                showScreen('screen-register');
+            }
+        }
+
+        // Initial Data Fetch
+        fetchLeaderboard();
+        return true;
+
+    } catch (e) {
+        console.error("Setup Web3 failed", e);
+        return false;
+    }
+}
+
+// 3. Save Score Logic
 async function handleChainSave() {
     const btn = document.getElementById('btnSave');
     
-    // Step A: Connect Wallet if not connected
     if (!contract) {
         btn.innerText = "CONNECTING...";
-        const connected = await connectWalletSilent();
+        const connected = await setupWeb3(true);
         if (!connected) {
             btn.innerText = "💾 SAVE ON-CHAIN";
             return; 
@@ -319,21 +421,20 @@ async function handleChainSave() {
     btn.disabled = true;
 
     try {
-        // Step B: Check if user is already registered on-chain
         btn.innerText = "CHECKING REG...";
         const player = await contract.getPlayer(userAddress);
         const registeredName = player[0];
 
-        // Step C: Register if they are new (using the name they typed earlier)
+        // If not registered, register now
         if (!registeredName) {
             btn.innerText = "REGISTERING...";
+            // Use the name they played with
+            if(!currentUsername) currentUsername = "SnakePlayer";
             const txReg = await contract.registerUser(currentUsername);
             await txReg.wait();
-        } else {
-            console.log("User already registered as:", registeredName);
         }
 
-        // Step D: Save Score
+        // Save Score
         btn.innerText = "SIGNING SCORE...";
         const txScore = await contract.saveScore(score);
         
@@ -341,8 +442,11 @@ async function handleChainSave() {
         await txScore.wait();
         
         btn.innerText = "SAVED! ✅";
-        fetchLeaderboard(); // Refresh leaderboard
-        fetchBestScore();   // Refresh personal best
+        
+        // Refresh Data
+        const p = await contract.getPlayer(userAddress);
+        document.getElementById("bestScoreDisplay").innerText = `BEST: ${p[1].toNumber()}`;
+        fetchLeaderboard();
 
     } catch (err) {
         console.error(err);
@@ -352,75 +456,17 @@ async function handleChainSave() {
     }
 }
 
-// Helper: Better Provider Detection for Farcaster & EIP-6963
+// Helper: Provider Detection
 async function getWalletProvider() {
-    // 1. Check Farcaster SDK Provider (PRIORITY for Mini-Apps)
-    // The SDK exposes the provider connected to the Warpcast wallet
-    if (window.sdk && window.sdk.provider) {
-        return window.sdk.provider;
-    }
-    
-    // 2. Check standard EIP-1193 window.ethereum (Desktop / External Browsers)
+    if (window.sdk && window.sdk.provider) return window.sdk.provider;
     if (window.ethereum) {
-        // Handle EIP-6963 (Multiple Injected Providers like Rainbow + Metamask)
         if (window.ethereum.providers) {
-             // Prefer Rainbow or Coinbase if available, else fallback to first
              const found = window.ethereum.providers.find(p => p.isRainbow || p.isCoinbaseWallet);
              return found || window.ethereum.providers[0];
         }
         return window.ethereum;
     }
     return null;
-}
-
-async function connectWalletSilent() {
-    const ethProvider = await getWalletProvider();
-    
-    if (!ethProvider) {
-        // Updated error message to be more helpful
-        alert("No crypto wallet found! If you are in Warpcast, try reloading the frame.");
-        return false;
-    }
-
-    try {
-        provider = new ethers.providers.Web3Provider(ethProvider);
-        await provider.send("eth_requestAccounts", []); // Triggers popup
-        
-        const network = await provider.getNetwork();
-        if (network.chainId !== 8453 && network.chainId !== 84532) {
-             alert("Please switch to Base Network!");
-             return false;
-        }
-
-        signer = provider.getSigner();
-        userAddress = await signer.getAddress();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-        
-        // Show address in HUD
-        document.getElementById("walletDisplay").innerText = `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
-        
-        // Fetch Data immediately upon connection
-        fetchLeaderboard();
-        fetchBestScore();
-
-        return true;
-    } catch (e) {
-        console.error("Connection denied", e);
-        return false;
-    }
-}
-
-// Fetch Personal Best Score
-async function fetchBestScore() {
-    if (!contract || !userAddress) return;
-    try {
-        const player = await contract.getPlayer(userAddress);
-        // player returns [username, bestScore]
-        const best = player[1] ? player[1].toString() : "0";
-        document.getElementById("bestScoreDisplay").innerText = `BEST: ${best}`;
-    } catch (e) {
-        console.log("Error fetching best score", e);
-    }
 }
 
 // --- AUDIO MANAGER ---
@@ -430,7 +476,6 @@ const audioFiles = {
     powerup: 'powerup.mp3',
     gameover: 'gameover.mp3'
 };
-
 const sounds = {};
 Object.keys(audioFiles).forEach(key => {
     sounds[key] = new Audio(audioFiles[key]);
@@ -459,7 +504,7 @@ function playSound(name) {
         sounds[name].pause();
         sounds[name].currentTime = 0;
         sounds[name].volume = 0.8; 
-        sounds[name].play().catch(e => console.log(`Sound ${name} failed:`, e));
+        sounds[name].play().catch(e => {});
     }
 }
 
@@ -468,7 +513,6 @@ function stopMusic() {
     sounds.bgm.currentTime = 0;
 }
 
-// Use SDK for sharing if available
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
     const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
@@ -481,6 +525,84 @@ function shareScore() {
     }
 }
 
+// --- LEADERBOARD (CHUNKED FETCH) ---
+async function fetchLeaderboard() {
+    if (!contract) return;
+    
+    const list = document.getElementById("leaderboardList");
+    // Don't clear immediately, looks glitchy. Just update when ready.
+    
+    try {
+        const currentBlock = await provider.getBlockNumber();
+        const currentMonth = new Date().getMonth();
+        let scores = [];
+        
+        // CHUNKING CONFIG
+        const BLOCK_CHUNK = 10000; // 10k blocks per request (safe for free RPCs)
+        const MAX_LOOKBACK = 100000; // Look back ~5-6 days (or adjust as needed)
+        
+        let toBlock = currentBlock;
+        let fromBlock = Math.max(0, currentBlock - BLOCK_CHUNK);
+        
+        // Loop backwards until we reach limit
+        while (toBlock > currentBlock - MAX_LOOKBACK && fromBlock >= 0) {
+            const filter = contract.filters.NewScore();
+            const events = await contract.queryFilter(filter, fromBlock, toBlock);
+            
+            for (let e of events) {
+                // Check month locally to avoid fetching block timestamp for every event
+                // This is an estimation. For strict month accuracy, you need block.timestamp
+                // For a mini-app, just showing recent high scores is usually enough.
+                // We'll trust the event order (newest first).
+                
+                // Simple dedup: check if username already in list
+                // If you want "Highest per user", check logic here.
+                // If you want "All High Scores", just push.
+                scores.push({
+                    name: e.args.username,
+                    score: e.args.score.toNumber()
+                });
+            }
+
+            // Optimization: If we have enough scores (e.g., 20+), we can stop early
+            if (scores.length > 50) break;
+
+            toBlock = fromBlock - 1;
+            fromBlock = Math.max(0, toBlock - BLOCK_CHUNK);
+        }
+
+        // Sort descending
+        scores.sort((a,b) => b.score - a.score);
+        
+        // Unique names only (Top score per user)
+        const uniqueScores = [];
+        const seenNames = new Set();
+        for (let s of scores) {
+            if (!seenNames.has(s.name)) {
+                uniqueScores.push(s);
+                seenNames.add(s.name);
+            }
+        }
+
+        const top5 = uniqueScores.slice(0, 5);
+
+        if(top5.length === 0) {
+            list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores found recently!</div>";
+        } else {
+            list.innerHTML = top5.map((s, i) => `
+                <div class="lb-row">
+                    <span class="lb-rank">#${i+1}</span>
+                    <span class="lb-name">${s.name}</span>
+                    <span class="lb-score">${s.score}</span>
+                </div>
+            `).join('');
+        }
+    } catch(e) {
+        console.log("Error loading leaderboard", e);
+        list.innerHTML = "<div style='text-align:center; padding:10px; color:red;'>Error loading scores</div>";
+    }
+}
+
 // --- WEB3 ABI ---
 const ABI = [
   "function registerUser(string username) public",
@@ -490,6 +612,7 @@ const ABI = [
   "event UserRegistered(address indexed player, string username)"
 ];
 
+// --- GAME ENGINE ---
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const box = 20; 
@@ -531,48 +654,6 @@ function animateScore(targetScore) {
         else scoreElement.innerText = targetScore;
     }
     requestAnimationFrame(update);
-}
-
-// FIXED LEADERBOARD FETCHING
-async function fetchLeaderboard() {
-    if (!contract) return;
-    try {
-        const filter = contract.filters.NewScore();
-        
-        // Query from a fixed block to get full history
-        const events = await contract.queryFilter(filter, START_BLOCK, "latest"); 
-
-        const currentMonth = new Date().getMonth();
-        let scores = [];
-
-        events.forEach(e => {
-            const d = new Date(e.args.timestamp * 1000);
-            if (d.getMonth() === currentMonth) {
-                scores.push({
-                    name: e.args.username,
-                    score: e.args.score.toNumber()
-                });
-            }
-        });
-
-        scores.sort((a,b) => b.score - a.score);
-        const top5 = scores.slice(0, 5);
-
-        const list = document.getElementById("leaderboardList");
-        if(top5.length === 0) {
-            list.innerHTML = "<div style='text-align:center; padding:10px;'>No scores this month yet!</div>";
-        } else {
-            list.innerHTML = top5.map((s, i) => `
-                <div class="lb-row">
-                    <span class="lb-rank">#${i+1}</span>
-                    <span class="lb-name">${s.name}</span>
-                    <span class="lb-score">${s.score}</span>
-                </div>
-            `).join('');
-        }
-    } catch(e) {
-        console.log("Error loading leaderboard", e);
-    }
 }
 
 function startGame() {
@@ -676,4 +757,131 @@ function draw() {
             ctx.fillStyle = "white";
             ctx.font = "10px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(isDouble ? "2x"
+            ctx.fillText(isDouble ? "2x" : "½", activePowerUp.x + box/2, activePowerUp.y + box - 4);
+        }
+    }
+
+    for (let i = 0; i < snake.length; i++) {
+        ctx.fillStyle = (i === 0) ? "#ffffff" : "#0052FF"; 
+        ctx.shadowBlur = (i === 0) ? 10 : 0;
+        ctx.shadowColor = "#ffffff";
+        ctx.fillRect(snake[i].x, snake[i].y, box-2, box-2);
+        ctx.shadowBlur = 0;
+    }
+
+    let snakeX = snake[0].x;
+    let snakeY = snake[0].y;
+
+    if (dir === "LEFT") snakeX -= box;
+    if (dir === "UP") snakeY -= box;
+    if (dir === "RIGHT") snakeX += box;
+    if (dir === "DOWN") snakeY += box;
+
+    if (snakeX < 0) snakeX = canvas.width - box;
+    else if (snakeX >= canvas.width) snakeX = 0;
+    
+    if (snakeY < 0) snakeY = canvas.height - box;
+    else if (snakeY >= canvas.height) snakeY = 0;
+
+    if (collision(snakeX, snakeY, snake)) {
+        gameOver();
+        return;
+    }
+
+    let ateFood = false;
+    if (snakeX === food.x && snakeY === food.y) {
+        score++;
+        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        playSound('eat'); 
+        placeFood();
+        ateFood = true;
+        if (score % 5 === 0) {
+            increaseSpeed();
+        }
+    }
+
+    if (activePowerUp && snakeX === activePowerUp.x && snakeY === activePowerUp.y) {
+        playSound('powerup'); 
+        if (activePowerUp.type === 'HALF') {
+            const newLen = Math.max(1, Math.floor(snake.length / 2));
+            snake = snake.slice(0, newLen);
+            score = Math.floor(score / 2);
+        } else if (activePowerUp.type === 'DOUBLE') {
+            growthPending += snake.length;
+            score = score * 2;
+        }
+        document.getElementById("scoreDisplay").innerText = "SCORE: " + score;
+        activePowerUp = null;
+        if (score % 5 === 0 && score > 0) {
+             increaseSpeed();
+        }
+    }
+
+    if (ateFood) {
+    } else if (growthPending > 0) {
+        growthPending--;
+    } else {
+        snake.pop();
+    }
+
+    let newHead = { x: snakeX, y: snakeY };
+    snake.unshift(newHead);
+}
+
+function collision(x, y, array) {
+    for (let i = 0; i < array.length; i++) {
+        if (x === array[i].x && y === array[i].y) return true;
+    }
+    return false;
+}
+
+function gameOver() {
+    isPlaying = false;
+    clearInterval(gameLoop);
+    if(powerUpTimer) clearTimeout(powerUpTimer);
+    stopMusic(); 
+    playSound('gameover'); 
+    showScreen('screen-gameover');
+    animateScore(score);
+    const btn = document.getElementById('btnSave');
+    btn.disabled = false;
+    btn.innerText = "💾 SAVE ON-CHAIN";
+}
+
+document.addEventListener("keydown", function(event) {
+    const key = event.keyCode;
+    if (key == 37 || key == 65) inputQueue.push("LEFT");
+    else if (key == 38 || key == 87) inputQueue.push("UP");
+    else if (key == 39 || key == 68) inputQueue.push("RIGHT");
+    else if (key == 40 || key == 83) inputQueue.push("DOWN");
+});
+
+let touchStartX = 0;
+let touchStartY = 0;
+
+document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('touchstart', function(event) {
+    touchStartX = event.changedTouches[0].screenX;
+    touchStartY = event.changedTouches[0].screenY;
+}, false);
+document.addEventListener('touchend', function(event) {
+    let touchEndX = event.changedTouches[0].screenX;
+    let touchEndY = event.changedTouches[0].screenY;
+    handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+}, false);
+
+function handleSwipe(startX, startY, endX, endY) {
+    let xDiff = endX - startX;
+    let yDiff = endY - startY;
+
+    if (Math.abs(xDiff) > Math.abs(yDiff)) {
+        if (xDiff > 0) inputQueue.push("RIGHT");
+        else if (xDiff < 0) inputQueue.push("LEFT");
+    } else {
+        if (yDiff > 0) inputQueue.push("DOWN");
+        else if (yDiff < 0) inputQueue.push("UP");
+    }
+}
+</script>
+</body>
+</html>
