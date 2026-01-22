@@ -5,7 +5,6 @@
 <title>Base Snakes 🟦</title>
 
 <meta name="base:app_id" content="696fa289c0ab25addaaaf7d8" />
-
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0052FF">
 
@@ -156,6 +155,7 @@
   #hud {
     display: flex;
     justify-content: space-between;
+    align-items: flex-end;
     width: 100%;
     max-width: 400px;
     padding: 10px;
@@ -165,6 +165,9 @@
     text-shadow: 0 0 5px var(--neon-blue);
     margin-top: 25px; 
   }
+
+  .hud-left { text-align: left; }
+  .hud-right { text-align: right; }
 
   canvas {
     background: rgba(0,0,0,0.8);
@@ -221,8 +224,13 @@
   <div class="dev-credit">developed by - @ashutosh9</div>
 
   <div id="hud">
-    <div id="scoreDisplay">SCORE: 0</div>
-    <div id="walletDisplay" style="font-size:14px; opacity:0.7"></div>
+    <div class="hud-left">
+      <div id="scoreDisplay">SCORE: 0</div>
+      <div id="bestScoreDisplay" style="font-size: 14px; color: var(--neon-pink);">BEST: -</div>
+    </div>
+    <div class="hud-right">
+       <div id="walletDisplay" style="font-size:12px; opacity:0.7; font-family:'Courier New', monospace;"></div>
+    </div>
   </div>
 
   <canvas id="game"></canvas>
@@ -242,6 +250,7 @@
       <input type="text" id="usernameInput" placeholder="CryptoSnake123" maxlength="12">
       <br>
       <button onclick="setLocalNameAndPlay()">PLAY NOW</button>
+      <div style="margin-top:10px; font-size:10px; color:#666;">Works with MetaMask, Rainbow, Coinbase</div>
     </div>
 
     <div id="screen-start" class="screen">
@@ -276,6 +285,9 @@
 let provider, signer, contract;
 let userAddress, currentUsername;
 const CONTRACT_ADDRESS = "0x1A7CcE659Ad0f71Ddc9f2Af9f4d1F155A8291BDd"; 
+// Start searching from this block (approx deployment) to ensure we get all scores
+// Since Base creates blocks very fast, "latest - 5000" is only 2 hours of history.
+const START_BLOCK = 24800000; 
 
 // --- GAME LOGIC START ---
 
@@ -330,7 +342,8 @@ async function handleChainSave() {
         await txScore.wait();
         
         btn.innerText = "SAVED! ✅";
-        fetchLeaderboard(); // Now we can fetch since we are connected
+        fetchLeaderboard(); // Refresh leaderboard
+        fetchBestScore();   // Refresh personal best
 
     } catch (err) {
         console.error(err);
@@ -340,14 +353,36 @@ async function handleChainSave() {
     }
 }
 
-// Helper: Connects wallet and sets up contracts
+// Helper: Better Provider Detection for Rainbow / Farcaster / Metamask
+async function getWalletProvider() {
+    // 1. Check if Farcaster injected a specific provider
+    if (window.farcaster && window.farcaster.provider) {
+        return window.farcaster.provider;
+    }
+    
+    // 2. Check standard EIP-1193 window.ethereum
+    if (window.ethereum) {
+        // Handle EIP-6963 (Multiple Injected Providers like Rainbow + Metamask)
+        if (window.ethereum.providers) {
+             // Prefer Rainbow or Coinbase if available, else fallback to first
+             const found = window.ethereum.providers.find(p => p.isRainbow || p.isCoinbaseWallet);
+             return found || window.ethereum.providers[0];
+        }
+        return window.ethereum;
+    }
+    return null;
+}
+
 async function connectWalletSilent() {
-    if (!window.ethereum) {
-        alert("No crypto wallet found!");
+    const ethProvider = await getWalletProvider();
+    
+    if (!ethProvider) {
+        alert("No crypto wallet found! If on mobile, try opening in Rainbow App or Coinbase Wallet.");
         return false;
     }
+
     try {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
+        provider = new ethers.providers.Web3Provider(ethProvider);
         await provider.send("eth_requestAccounts", []); // Triggers popup
         
         const network = await provider.getNetwork();
@@ -362,10 +397,28 @@ async function connectWalletSilent() {
         
         // Show address in HUD
         document.getElementById("walletDisplay").innerText = `🟢 ${userAddress.slice(0,4)}...${userAddress.slice(-4)}`;
+        
+        // Fetch Data immediately upon connection
+        fetchLeaderboard();
+        fetchBestScore();
+
         return true;
     } catch (e) {
         console.error("Connection denied", e);
         return false;
+    }
+}
+
+// Fetch Personal Best Score
+async function fetchBestScore() {
+    if (!contract || !userAddress) return;
+    try {
+        const player = await contract.getPlayer(userAddress);
+        // player returns [username, bestScore]
+        const best = player[1] ? player[1].toString() : "0";
+        document.getElementById("bestScoreDisplay").innerText = `BEST: ${best}`;
+    } catch (e) {
+        console.log("Error fetching best score", e);
     }
 }
 
@@ -414,7 +467,7 @@ function stopMusic() {
     sounds.bgm.currentTime = 0;
 }
 
-// FIXED: Use SDK for sharing if available
+// Use SDK for sharing if available
 function shareScore() {
     const appUrl = "https://mini-app-phi-ashen.vercel.app/"; 
     const text = `I just scored ${score} on Base Snakes! 🐍\n\nCan you beat me? Play now on @base 👇`;
@@ -479,12 +532,15 @@ function animateScore(targetScore) {
     requestAnimationFrame(update);
 }
 
-// Only fetches if contract is available
+// FIXED LEADERBOARD FETCHING
 async function fetchLeaderboard() {
     if (!contract) return;
     try {
         const filter = contract.filters.NewScore();
-        const events = await contract.queryFilter(filter, -5000); 
+        
+        // CHANGE: Query from a much earlier block (or 0) instead of -5000.
+        // Base blocks are 2s, so 5000 blocks is only ~2.7 hours.
+        const events = await contract.queryFilter(filter, START_BLOCK, "latest"); 
 
         const currentMonth = new Date().getMonth();
         let scores = [];
@@ -499,6 +555,7 @@ async function fetchLeaderboard() {
             }
         });
 
+        // Dedup: Only keep highest score per name? (Optional, currently keeps all entries)
         scores.sort((a,b) => b.score - a.score);
         const top5 = scores.slice(0, 5);
 
